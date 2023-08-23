@@ -1,13 +1,14 @@
-import aiofiles
-from ..config import settings
 import os
+import aiofiles
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import JSONResponse
+from ..config import settings
 
 router = APIRouter(
     prefix='/documents',
     tags=['documents']
 )
+
 
 @router.post(
     path='/upload'
@@ -21,12 +22,12 @@ async def doc_upload(file: UploadFile = File(...)) -> JSONResponse:
         async with aiofiles.open(file_path, 'wb') as f:
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
-    except Exception as e:
+    except Exception as error:
         return JSONResponse(
             content={
                 'status': 'error',
                 'message': f'Error occurred while uploading {file.filename}',
-                'exception': str(e)
+                'exception': str(error)
             },
             status_code=500
         )
