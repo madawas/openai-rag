@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  db:
+    image: ankane/pgvector:latest
+    ports:
+      - 5432:5432
+    env_file:
+      - ./postgres/pg.env
+    volumes:
+      - ./postgres/scripts/extension.sql:/docker-entrypoint-initdb.d/extension.sql
+  oai-rag-api:
+    build:
+      context: .
+    depends_on:
+      - db
+    ports:
+      - 8000:8000
+    volumes:
+      - ./docs:/home/uploads
+    
