@@ -21,4 +21,4 @@ jobs:
         pip install -r requirements.txt
     - name: Analysing the code with pylint
       run: |
-        pylint $(git ls-files '*.py') --threshold 5
+        pylint --fail-under=5 $(git ls-files '*.py')
