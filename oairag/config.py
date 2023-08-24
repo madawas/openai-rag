@@ -1,6 +1,6 @@
-from pydantic import BaseModel
 from pydantic import DirectoryPath, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import Union
 
 
 class Settings(BaseSettings):
@@ -14,34 +14,10 @@ class Settings(BaseSettings):
     """
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
     doc_upload_dir: DirectoryPath = Field(default='/Users/madawa/projects/openai-rag/test')
+    chunk_length: int = Field(default=1000)
+    chunk_overlap: int = Field(default=300)
+    sentence_search_limit: int = Field(default=100)
+    form_recogniser_service: Union[str, None] = None
 
 
 settings = Settings()
-
-
-class SuccessResponse(BaseModel):
-    """
-    Success response model.
-
-    Attributes:
-        status (str): Status of the response ('success').
-        message (str): Message indicating the response status.
-
-    """
-    status: str = 'success'
-    message: str
-
-
-class ErrorResponse(BaseModel):
-    """
-    Error response model.
-
-    Attributes:
-        status (str): Status of the response ('error').
-        message (str): Message indicating the response status.
-        exception (str): String representing the exception details.
-
-    """
-    status: str = 'error'
-    message: str
-    exception: str

@@ -1,5 +1,8 @@
+import logging
 from fastapi import FastAPI
 from .routers import documents
+
+logging.basicConfig(level=logging.DEBUG)
 
 app = FastAPI(
     debug=True,

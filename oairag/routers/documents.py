@@ -2,9 +2,18 @@ import os
 from typing import Union
 
 import aiofiles
-from fastapi import APIRouter, File, UploadFile, status, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    File,
+    Response,
+    status,
+    UploadFile
+)
 
-from ..config import ErrorResponse, SuccessResponse, settings
+from oairag.config import settings
+from oairag.models import SuccessResponse, ErrorResponse
+from oairag.doc_utils import process_document
 
 router = APIRouter(
     prefix='/documents',
@@ -20,13 +29,14 @@ router = APIRouter(
     status_code=status.HTTP_201_CREATED,
     responses={500: {'model': ErrorResponse, 'description': 'Server Error'}}
 )
-async def doc_upload(response: Response, file: UploadFile = File(...)) -> \
-        Union[SuccessResponse, ErrorResponse]:
+async def doc_upload(response: Response, background_tasks: BackgroundTasks,
+                     file: UploadFile = File(...)) -> Union[SuccessResponse, ErrorResponse]:
     """
     Uploads a text document to be processed.
 
     Args:
         response (Response): The FastAPI Response object to modify in case of errors.
+        background_tasks (BackgroundTasks): Asynchronous processing tasks to run on uploaded docs.
         file (UploadFile): The UploadFile object representing the uploaded file.
 
     Returns:
@@ -56,4 +66,6 @@ async def doc_upload(response: Response, file: UploadFile = File(...)) -> \
                              exception=repr(error))
     finally:
         await file.close()
+    # todo: insert db entry and return id from here
+    background_tasks.add_task(process_document, file.filename, settings.form_recogniser_service)
     return SuccessResponse(message=f'File {file.filename} uploaded successfully')
