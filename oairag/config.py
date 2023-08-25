@@ -1,6 +1,6 @@
-from pydantic import DirectoryPath, Field
+from pydantic import DirectoryPath, Field, PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Union
+from typing import Union, Optional
 
 
 class Settings(BaseSettings):
@@ -14,10 +14,18 @@ class Settings(BaseSettings):
     """
     model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
     doc_upload_dir: DirectoryPath = Field(default='/Users/madawa/projects/openai-rag/test')
-    chunk_length: int = Field(default=1000)
+    chunk_size: int = Field(default=1000)
     chunk_overlap: int = Field(default=300)
-    sentence_search_limit: int = Field(default=100)
-    form_recogniser_service: Union[str, None] = None
+
+    openai_api_key: str
+    openai_api_type: Optional[Union[str, None]] = None
+    openai_api_version: Optional[Union[str, None]] = None
+
+    pg_username: str = Field(default="postgres")
+    pg_password: str = Field(default="postgres")
+    pg_database: str = Field(default="oai_demo_vdb")
+    pg_dsn: PostgresDsn = Field(default=f"postgres://{pg_username}:{pg_password}@db:5432/"
+                                        f"{pg_database}")
 
 
 settings = Settings()

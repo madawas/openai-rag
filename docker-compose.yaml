@@ -9,6 +9,7 @@ services:
       - ./postgres/pg.env
     volumes:
       - ./postgres/scripts/extension.sql:/docker-entrypoint-initdb.d/extension.sql
+      - ./postgres/scripts/init.sql:/docker-entrypoint-initdb.d/init.sql
   oai-rag-api:
     build:
       context: .
@@ -18,4 +19,6 @@ services:
       - 8000:8000
     volumes:
       - ./docs:/home/uploads
+      - ./oairag:/home/oairag
+      - ./.env:/home/.env
     

@@ -60,12 +60,12 @@ async def doc_upload(response: Response, background_tasks: BackgroundTasks,
         async with aiofiles.open(file_path, 'wb') as f:
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
-    except Exception as error:
+    except Exception as e:
         response.status_code = 500
         return ErrorResponse(message=f'Error occurred while uploading {file.filename}',
-                             exception=repr(error))
+                             exception=repr(e))
     finally:
         await file.close()
     # todo: insert db entry and return id from here
-    background_tasks.add_task(process_document, file.filename, settings.form_recogniser_service)
+    background_tasks.add_task(process_document, file_path)
     return SuccessResponse(message=f'File {file.filename} uploaded successfully')

@@ -1,120 +1,112 @@
 import logging
 import os
+from typing import Optional
 
-from pypdf import PdfReader
-from tenacity import retry, stop_after_attempt, wait_random_exponential
-from oairag.config import settings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import (
+    PyPDFLoader,
+    TextLoader,
+    UnstructuredHTMLLoader,
+    UnstructuredMarkdownLoader
+)
 from langchain.embeddings import OpenAIEmbeddings
+from langchain.schema import Document
+from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
+from pypdf import PdfReader
+
+from oairag.config import settings
+from oairag.exceptions import UnsupportedFileFormatException
 
 LOG = logging.getLogger(__name__)
-EMBEDDINGS = OpenAIEmbeddings()
+_EMBEDDINGS = OpenAIEmbeddings()
+_FILE_FORMAT_DICT = {
+    "md": "markdown",
+    "txt": "text",
+    "html": "html",
+    "shtml": "html",
+    "htm": "html",
+    "pdf": "pdf"
+}
 
 
-def process_document(filename: str, form_recognizer=None):
-    LOG.debug(f"Processing document: {filename}")
-    page_map = get_document_text(filename, form_recognizer)
-    LOG.debug(f"{filename} processing complete")
+def _get_file_format(file_path: str) -> Optional[str]:
+    """Gets the file format from the file name.
+    Returns None if the file format is not supported.
+    Args:
+        file_path (str): The file path of the file whose format needs to be retrieved.
+    Returns:
+        str: The file format.
+    """
+    file_path = os.path.basename(file_path)
+    file_extension = file_path.split(".")[-1]
+    return _FILE_FORMAT_DICT.get(file_extension, None)
 
 
-def get_document_text(filename: str, form_recognizer=None) -> list:
-    offset = 0
-    page_map = []
-    if form_recognizer:
-        LOG.error("Form Recognizer is not supported")
-        # todo: implement form recognizer support
-        # https://github.com/Azure-Samples/azure-search-openai-demo/blob/main/scripts/prepdocs.py
-        # #L113-L146
-        reader = PdfReader(os.path.join(settings.doc_upload_dir, filename))
-        pages = reader.pages
-        for page_num, p in enumerate(pages):
-            page_text = p.extract_text()
-            page_map.append((page_num, offset, page_text))
-            offset += len(page_text)
-    else:
-        reader = PdfReader(os.path.join(settings.doc_upload_dir, filename))
-        pages = reader.pages
-        for page_num, p in enumerate(pages):
-            page_text = p.extract_text()
-            page_map.append((page_num, offset, page_text))
-            offset += len(page_text)
-    LOG.debug(page_map)
-    return page_map
+def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
+    if file_path is None:
+        raise FileNotFoundError(f"File path: {file_path} not found.")
 
-
-def split_text(page_map):
-    sentence_endings = [".", "!", "?"]
+    sentence_endings = [".", "!", "?", "\n\n"]
     words_breaks = [",", ";", ":", " ", "(", ")", "[", "]", "{", "}", "\t", "\n"]
 
-    def find_page(offset):
-        num_pages = len(page_map)
-        for i in range(num_pages - 1):
-            if page_map[i][1] <= offset < page_map[i + 1][1]:
-                return i
-        return num_pages - 1
+    # todo: support token text splitter and add file format based parameters
+    if file_format == 'html':
+        return RecursiveCharacterTextSplitter(
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+            add_start_index=True,
+            separators=RecursiveCharacterTextSplitter.get_separators_for_language(Language.HTML)
+        ).split_documents(UnstructuredHTMLLoader(file_path).load())
 
-    all_text = "".join(p[2] for p in page_map)
-    length = len(all_text)
-    start = 0
-    end = length
-    while start + settings.chunk_overlap < length:
-        last_word = -1
-        end = start + settings.chunk_length
+    if file_format == 'markdown':
+        return RecursiveCharacterTextSplitter(
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+            add_start_index=True,
+            separators=RecursiveCharacterTextSplitter.get_separators_for_language(Language.MARKDOWN)
+        ).split_documents(UnstructuredMarkdownLoader(file_path).load())
 
-        if end > length:
-            end = length
-        else:
-            # Try to find the end of the sentence
-            while end < length and (
-                    end - start - settings.chunk_length) < settings.sentence_search_limit and \
-                    all_text[end] not in sentence_endings:
-                if all_text[end] in words_breaks:
-                    last_word = end
-                end += 1
-            if end < length and all_text[end] not in sentence_endings and last_word > 0:
-                end = last_word  # Fall back to at least keeping a whole word
-        if end < length:
-            end += 1
+    if file_format == 'pdf':
+        return RecursiveCharacterTextSplitter(
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+            add_start_index=True,
+            separators=sentence_endings + words_breaks
+        ).split_documents(PyPDFLoader(file_path).load())
 
-        # Try to find the start of the sentence or at least a whole word boundary
-        last_word = -1
-        while start > 0 and start > end - settings.chunk_length - 2 * \
-                settings.sentence_search_limit and all_text[start] not in sentence_endings:
-            if all_text[start] in words_breaks:
-                last_word = start
-            start -= 1
-        if all_text[start] not in sentence_endings and last_word > 0:
-            start = last_word
-        if start > 0:
-            start += 1
+    if file_format == 'text':
+        return RecursiveCharacterTextSplitter(
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+            add_start_index=True,
+            separators=sentence_endings + words_breaks
+        ).split_documents(TextLoader(file_path).load())
 
-        section_text = all_text[start:end]
-        yield section_text, find_page(start)
-
-        last_table_start = section_text.rfind("<table")
-        if (
-                last_table_start > 2 * settings.sentence_search_limit and last_table_start >
-                section_text.rfind(
-                "</table")):
-            # If the section ends with an unclosed table, we need to start the next section with
-            # the table.
-            # If table starts inside SENTENCE_SEARCH_LIMIT, we ignore it, as that will cause an
-            # infinite loop for tables longer than MAX_SECTION_LENGTH
-            # If last table starts inside SECTION_OVERLAP, keep overlapping
-            LOG.debug(f"Section ends with unclosed table, starting next section with the table at "
-                      f"page {find_page(start)} offset {start} table start {last_table_start}")
-            start = min(end - settings.chunk_overlap, start + last_table_start)
-        else:
-            start = end - settings.chunk_overlap
-
-    if start + settings.chunk_overlap < end:
-        yield all_text[start:end], find_page(start)
+    raise UnsupportedFileFormatException(
+        f"File: {file_path} with format {file_format} is not supported")
 
 
+def process_document(file_path: str):
+    """
+    Processes an uploaded document. Runs the flow to chunk the file content and embed the text
+    chunks and store it in a vector collection with other metadata
 
-# @retry(wait=wait_random_exponential(min=1, max=60), stop=stop_after_attempt(15), before_sleep=before_retry_sleep)
-# def compute_embedding(text):
-#     refresh_openai_token()
-#     return openai.Embedding.create(engine=args.openaideployment, input=text)["data"][0]["embedding"]
+    :param file_path: Absolute path of the uploaded document to process
+    """
+    LOG.debug(f"Processing document: {file_path}")
+    file_format = _get_file_format(file_path)
+    chunks = _load_and_split_content(file_path, file_format)
+    LOG.debug(len(chunks))
+    LOG.debug(f"{file_path} processing complete")
 
 
+def get_document_text(filename: str) -> list:
+    offset = 0
+    page_map = []
+    reader = PdfReader(os.path.join(settings.doc_upload_dir, filename))
+    pages = reader.pages
+    for page_num, p in enumerate(pages):
+        page_text = p.extract_text()
+        page_map.append((page_num, offset, page_text))
+        offset += len(page_text)
+    LOG.debug(page_map)
+    return page_map
