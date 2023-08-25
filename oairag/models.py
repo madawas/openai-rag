@@ -1,16 +1,17 @@
-from pydantic import BaseModel
+from enum import Enum
+from typing import Union
+from pydantic import BaseModel, ConfigDict, UUID4
 
-class SuccessResponse(BaseModel):
+
+class UploadSuccessResponse(BaseModel):
     """
-    Success response model.
+    Response when the document upload is successful. Response includes the document id of the
+    uploaded document.
 
     Attributes:
-        status (str): Status of the response ('success').
-        message (str): Message indicating the response status.
-
+        document_id (UUID4): Id of the uploaded document
     """
-    status: str = 'success'
-    message: str
+    document_id: UUID4
 
 
 class ErrorResponse(BaseModel):
@@ -26,3 +27,22 @@ class ErrorResponse(BaseModel):
     status: str = 'error'
     message: str
     exception: str
+
+
+class ProcStatus(str, Enum):
+    PENDING = "pending"
+    COMPLETE = "complete"
+    ERROR = "error"
+
+
+class DocumentBase(BaseModel):
+    id: Union[str, None] = None
+    file_name: str
+    name_hash: str
+    content_hash: Union[str, None] = None
+    process_status: ProcStatus = ProcStatus.PENDING
+    process_description: Union[str, None] = None
+    user_id: Union[str, None] = None
+    collection_id: Union[str, None] = None
+
+    model_config = ConfigDict(from_attributes=True)

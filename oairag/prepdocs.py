@@ -17,7 +17,7 @@ from oairag.config import settings
 from oairag.exceptions import UnsupportedFileFormatException
 
 LOG = logging.getLogger(__name__)
-_EMBEDDINGS = OpenAIEmbeddings()
+_EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
 _FILE_FORMAT_DICT = {
     "md": "markdown",
     "txt": "text",
@@ -92,11 +92,11 @@ def process_document(file_path: str):
 
     :param file_path: Absolute path of the uploaded document to process
     """
-    LOG.debug(f"Processing document: {file_path}")
+    LOG.debug("Processing document: %s", file_path)
     file_format = _get_file_format(file_path)
     chunks = _load_and_split_content(file_path, file_format)
     LOG.debug(len(chunks))
-    LOG.debug(f"{file_path} processing complete")
+    LOG.debug("%s processing complete", file_path)
 
 
 def get_document_text(filename: str) -> list:
@@ -104,8 +104,8 @@ def get_document_text(filename: str) -> list:
     page_map = []
     reader = PdfReader(os.path.join(settings.doc_upload_dir, filename))
     pages = reader.pages
-    for page_num, p in enumerate(pages):
-        page_text = p.extract_text()
+    for page_num, page in enumerate(pages):
+        page_text = page.extract_text()
         page_map.append((page_num, offset, page_text))
         offset += len(page_text)
     LOG.debug(page_map)

@@ -1,10 +1,12 @@
 import os
+import hashlib
 from typing import Union
-
+from sqlalchemy.orm import Session
 import aiofiles
 from fastapi import (
     APIRouter,
     BackgroundTasks,
+    Depends,
     File,
     Response,
     status,
@@ -12,8 +14,9 @@ from fastapi import (
 )
 
 from oairag.config import settings
-from oairag.models import SuccessResponse, ErrorResponse
-from oairag.doc_utils import process_document
+from oairag.models import UploadSuccessResponse, ErrorResponse, DocumentBase
+from oairag.prepdocs import process_document
+from oairag import database
 
 router = APIRouter(
     prefix='/documents',
@@ -30,17 +33,22 @@ router = APIRouter(
     responses={500: {'model': ErrorResponse, 'description': 'Server Error'}}
 )
 async def doc_upload(response: Response, background_tasks: BackgroundTasks,
-                     file: UploadFile = File(...)) -> Union[SuccessResponse, ErrorResponse]:
+                     file: UploadFile = File(...), session: Session =
+                     Depends(database.get_db_session)) -> \
+        Union[UploadSuccessResponse, ErrorResponse]:
     """
     Uploads a text document to be processed.
 
     Args:
-        response (Response): The FastAPI Response object to modify in case of errors.
-        background_tasks (BackgroundTasks): Asynchronous processing tasks to run on uploaded docs.
-        file (UploadFile): The UploadFile object representing the uploaded file.
+        :param response: (Response): The FastAPI Response object to modify in case of errors.
+        :param background_tasks: (BackgroundTasks): Asynchronous processing tasks to run on
+        uploaded docs.
+        :param  file: (UploadFile): The UploadFile object representing the uploaded file.
+        :param session: Database session
 
     Returns:
-        Union[ErrorResponse, SuccessResponse]: Returns an ErrorResponse object if an error occurs,
+        Union[ErrorResponse, UploadSuccessResponse]: Returns an ErrorResponse object if an error
+        occurs,
             otherwise returns a SuccessResponse object indicating successful file upload.
 
     This function uploads a document file by reading the contents of the provided UploadFile
@@ -52,6 +60,7 @@ async def doc_upload(response: Response, background_tasks: BackgroundTasks,
     Note:
         Make sure to configure the `settings.model_dump()` and `settings.doc_upload_dir`
         appropriately.
+
 
     """
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
@@ -66,6 +75,11 @@ async def doc_upload(response: Response, background_tasks: BackgroundTasks,
                              exception=repr(e))
     finally:
         await file.close()
-    # todo: insert db entry and return id from here
+    # todo: check conflict
+    document = DocumentBase(
+        file_name=file.filename,
+        name_hash=hashlib.sha256(file.filename.encode('utf-8')).hexdigest()
+    )
+    document_id = database.add_document(session, document)
     background_tasks.add_task(process_document, file_path)
-    return SuccessResponse(message=f'File {file.filename} uploaded successfully')
+    return UploadSuccessResponse(document_id=document_id)

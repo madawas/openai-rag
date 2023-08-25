@@ -1,6 +1,6 @@
-from pydantic import DirectoryPath, Field, PostgresDsn
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Union, Optional
+from pydantic import DirectoryPath, Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -21,11 +21,10 @@ class Settings(BaseSettings):
     openai_api_type: Optional[Union[str, None]] = None
     openai_api_version: Optional[Union[str, None]] = None
 
-    pg_username: str = Field(default="postgres")
-    pg_password: str = Field(default="postgres")
-    pg_database: str = Field(default="oai_demo_vdb")
-    pg_dsn: PostgresDsn = Field(default=f"postgres://{pg_username}:{pg_password}@db:5432/"
-                                        f"{pg_database}")
+    postgres_user: str = Field(default="postgres")
+    postgres_password: str = Field(default="postgres")
+    postgres_host: str = Field(default="db")
+    postgres_db: str = Field(default="oai_demo_vdb")
 
 
 settings = Settings()
