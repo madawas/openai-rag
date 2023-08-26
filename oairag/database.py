@@ -1,7 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from oairag.config import settings
-from oairag import models, dao
+from oairag.models import DocumentDTO
+from oairag.dao import DocumentDAO
 
 _engine = create_engine(
     f"postgresql://{settings.postgres_user}:{settings.postgres_password}@{settings.postgres_host}"
@@ -19,8 +20,8 @@ def get_db_session():
         db_session.close()
 
 
-def add_document(session: Session, document: models.DocumentDTO) -> str:
-    doc_entry = dao.DocumentDAO(
+def add_document(session: Session, document: DocumentDTO) -> DocumentDTO:
+    doc_entry = DocumentDAO(
         file_name=document.file_name,
         name_hash=document.name_hash,
         process_status=document.process_status,
@@ -31,4 +32,4 @@ def add_document(session: Session, document: models.DocumentDTO) -> str:
     session.commit()
     session.refresh(doc_entry)
 
-    return str(doc_entry.id)
+    return DocumentDTO.model_validate(doc_entry, from_attributes=True)

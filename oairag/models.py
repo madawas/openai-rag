@@ -3,18 +3,6 @@ from typing import Union
 from pydantic import BaseModel, ConfigDict, UUID4
 
 
-class UploadSuccessResponse(BaseModel):
-    """
-    Response when the document upload is successful. Response includes the document id of the
-    uploaded document.
-
-    Attributes:
-        document_id (UUID4): Id of the uploaded document
-    """
-
-    document_id: UUID4
-
-
 class ErrorResponse(BaseModel):
     """
     Error response model.
@@ -37,8 +25,17 @@ class ProcStatus(str, Enum):
     ERROR = "error"
 
 
+class DocumentResponse(BaseModel):
+    id: UUID4
+    file_name: str
+    process_status: ProcStatus
+    process_description: Union[str, None]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentDTO(BaseModel):
-    id: Union[str, None] = None
+    id: UUID4 = None
     file_name: str
     name_hash: str
     content_hash: Union[str, None] = None

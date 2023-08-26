@@ -14,7 +14,7 @@ from fastapi import (
 )
 
 from oairag.config import settings
-from oairag.models import UploadSuccessResponse, ErrorResponse, DocumentDTO
+from oairag.models import DocumentResponse, ErrorResponse, DocumentDTO
 from oairag.prepdocs import process_document
 from oairag import database
 
@@ -26,6 +26,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
     summary="Upload a document to process",
     description="Upload a document to extract the text, chunk it and embed the chunks and store "
     "in a vector store",
+    response_model=DocumentResponse,
     status_code=status.HTTP_201_CREATED,
     responses={500: {"model": ErrorResponse, "description": "Server Error"}},
 )
@@ -34,7 +35,7 @@ async def doc_upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     session: Session = Depends(database.get_db_session),
-) -> Union[UploadSuccessResponse, ErrorResponse]:
+) -> Union[DocumentResponse, ErrorResponse]:
     """
     Uploads a text document to be processed.
 
@@ -46,14 +47,8 @@ async def doc_upload(
         :param session: Database session
 
     Returns:
-        Union[ErrorResponse, UploadSuccessResponse]: Returns an ErrorResponse object if an error
-        occurs, otherwise returns a UploadSuccessResponse object indicating successful file upload.
-
-    This function uploads a document file by reading the contents of the provided UploadFile
-    object and saving it to the directory specified in the settings. The file is read in chunks
-    of 1MB and asynchronously written to the file path. Any exceptions that occur during the upload
-    process are caught and handled by modifying the response object's status code and returning an
-    ErrorResponse. If the upload is successful, a SuccessResponse is returned.
+        Union[ErrorResponse, DocumentResponse]: Returns an ErrorResponse object if an error
+        occurs, otherwise returns a DocumentResponse.
     """
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
 
@@ -61,6 +56,8 @@ async def doc_upload(
         async with aiofiles.open(file_path, "wb") as f:
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
+        # todo: check conflict
+        document = _add_document_entry(file.filename, session)
     except Exception as e:
         response.status_code = 500
         return ErrorResponse(
@@ -68,11 +65,13 @@ async def doc_upload(
         )
     finally:
         await file.close()
-    # todo: check conflict
-    document = DocumentDTO(
-        file_name=file.filename,
-        name_hash=hashlib.sha256(file.filename.encode("utf-8")).hexdigest(),
-    )
-    document_id = database.add_document(session, document)
     background_tasks.add_task(process_document, file_path)
-    return UploadSuccessResponse(document_id=document_id)
+    return document
+
+
+def _add_document_entry(filename: str, session: Session) -> DocumentResponse:
+    document = database.add_document(session, DocumentDTO(
+        file_name=filename,
+        name_hash=hashlib.sha256(filename.encode("utf-8")).hexdigest(),
+    ))
+    return DocumentResponse.model_validate(document, from_attributes=True)
