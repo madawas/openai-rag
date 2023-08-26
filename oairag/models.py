@@ -37,7 +37,7 @@ class ProcStatus(str, Enum):
     ERROR = "error"
 
 
-class DocumentBase(BaseModel):
+class DocumentDTO(BaseModel):
     id: Union[str, None] = None
     file_name: str
     name_hash: str

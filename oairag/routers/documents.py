@@ -14,7 +14,7 @@ from fastapi import (
 )
 
 from oairag.config import settings
-from oairag.models import UploadSuccessResponse, ErrorResponse, DocumentBase
+from oairag.models import UploadSuccessResponse, ErrorResponse, DocumentDTO
 from oairag.prepdocs import process_document
 from oairag import database
 
@@ -47,8 +47,7 @@ async def doc_upload(
 
     Returns:
         Union[ErrorResponse, UploadSuccessResponse]: Returns an ErrorResponse object if an error
-        occurs,
-            otherwise returns a SuccessResponse object indicating successful file upload.
+        occurs, otherwise returns a UploadSuccessResponse object indicating successful file upload.
 
     This function uploads a document file by reading the contents of the provided UploadFile
     object and saving it to the directory specified in the settings. The file is read in chunks
@@ -70,7 +69,7 @@ async def doc_upload(
     finally:
         await file.close()
     # todo: check conflict
-    document = DocumentBase(
+    document = DocumentDTO(
         file_name=file.filename,
         name_hash=hashlib.sha256(file.filename.encode("utf-8")).hexdigest(),
     )
