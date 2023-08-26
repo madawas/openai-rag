@@ -14,9 +14,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
-    doc_upload_dir: DirectoryPath = Field(
-        default="/home/uploads"
-    )
+    doc_upload_dir: DirectoryPath = Field(default="/home/uploads")
     chunk_size: int = Field(default=1000)
     chunk_overlap: int = Field(default=300)
 

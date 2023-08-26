@@ -10,7 +10,7 @@ from fastapi import (
     File,
     Response,
     status,
-    UploadFile
+    UploadFile,
 )
 
 from oairag.config import settings
@@ -33,7 +33,7 @@ async def doc_upload(
     response: Response,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    session: Session = Depends(database.get_db_session)
+    session: Session = Depends(database.get_db_session),
 ) -> Union[UploadSuccessResponse, ErrorResponse]:
     """
     Uploads a text document to be processed.

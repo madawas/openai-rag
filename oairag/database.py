@@ -24,7 +24,7 @@ def add_document(session: Session, document: models.DocumentBase) -> str:
         file_name=document.file_name,
         name_hash=document.name_hash,
         process_status=document.process_status,
-        user_id=document.user_id
+        user_id=document.user_id,
     )
 
     session.add(doc_entry)
