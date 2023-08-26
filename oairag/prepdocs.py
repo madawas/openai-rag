@@ -1,3 +1,9 @@
+"""
+This module defines functions for processing uploaded documents, including loading and chunking
+content, as well as embedding text chunks and storing them in a vector collection.
+
+It also provides utility functions to determine file formats and split content based on file formats.
+"""
 import logging
 import os
 from typing import Optional
@@ -6,12 +12,11 @@ from langchain.document_loaders import (
     PyPDFLoader,
     TextLoader,
     UnstructuredHTMLLoader,
-    UnstructuredMarkdownLoader
+    UnstructuredMarkdownLoader,
 )
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
-from pypdf import PdfReader
 
 from oairag.config import settings
 from oairag.exceptions import UnsupportedFileFormatException
@@ -24,17 +29,17 @@ _FILE_FORMAT_DICT = {
     "html": "html",
     "shtml": "html",
     "htm": "html",
-    "pdf": "pdf"
+    "pdf": "pdf",
 }
 
 
 def _get_file_format(file_path: str) -> Optional[str]:
-    """Gets the file format from the file name.
-    Returns None if the file format is not supported.
-    Args:
-        file_path (str): The file path of the file whose format needs to be retrieved.
-    Returns:
-        str: The file format.
+    """
+    Extracts the file format from a given file path.
+
+    :param file_path: The path of the file.
+
+    :returns Optional[str]: The detected file format or None if not supported.
     """
     file_path = os.path.basename(file_path)
     file_extension = file_path.split(".")[-1]
@@ -42,6 +47,16 @@ def _get_file_format(file_path: str) -> Optional[str]:
 
 
 def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
+    """
+    Loads and splits the content of a file based on the given file format.
+
+    :param file_path: The path of the file to process.
+    :param file_format: The format of the file.
+
+    :returns list[Document]: A list of Document objects containing the split content.
+
+    :raises UnsupportedFileFormatException: If the file format is not supported.
+    """
     if file_path is None:
         raise FileNotFoundError(f"File path: {file_path} not found.")
 
@@ -49,40 +64,45 @@ def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
     words_breaks = [",", ";", ":", " ", "(", ")", "[", "]", "{", "}", "\t", "\n"]
 
     # todo: support token text splitter and add file format based parameters
-    if file_format == 'html':
+    if file_format == "html":
         return RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             add_start_index=True,
-            separators=RecursiveCharacterTextSplitter.get_separators_for_language(Language.HTML)
+            separators=RecursiveCharacterTextSplitter.get_separators_for_language(
+                Language.HTML
+            ),
         ).split_documents(UnstructuredHTMLLoader(file_path).load())
 
-    if file_format == 'markdown':
+    if file_format == "markdown":
         return RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             add_start_index=True,
-            separators=RecursiveCharacterTextSplitter.get_separators_for_language(Language.MARKDOWN)
+            separators=RecursiveCharacterTextSplitter.get_separators_for_language(
+                Language.MARKDOWN
+            ),
         ).split_documents(UnstructuredMarkdownLoader(file_path).load())
 
-    if file_format == 'pdf':
+    if file_format == "pdf":
         return RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             add_start_index=True,
-            separators=sentence_endings + words_breaks
+            separators=sentence_endings + words_breaks,
         ).split_documents(PyPDFLoader(file_path).load())
 
-    if file_format == 'text':
+    if file_format == "text":
         return RecursiveCharacterTextSplitter(
             chunk_size=settings.chunk_size,
             chunk_overlap=settings.chunk_overlap,
             add_start_index=True,
-            separators=sentence_endings + words_breaks
+            separators=sentence_endings + words_breaks,
         ).split_documents(TextLoader(file_path).load())
 
     raise UnsupportedFileFormatException(
-        f"File: {file_path} with format {file_format} is not supported")
+        f"File: {file_path} with format {file_format} is not supported"
+    )
 
 
 def process_document(file_path: str):
@@ -97,16 +117,3 @@ def process_document(file_path: str):
     chunks = _load_and_split_content(file_path, file_format)
     LOG.debug(len(chunks))
     LOG.debug("%s processing complete", file_path)
-
-
-def get_document_text(filename: str) -> list:
-    offset = 0
-    page_map = []
-    reader = PdfReader(os.path.join(settings.doc_upload_dir, filename))
-    pages = reader.pages
-    for page_num, page in enumerate(pages):
-        page_text = page.extract_text()
-        page_map.append((page_num, offset, page_text))
-        offset += len(page_text)
-    LOG.debug(page_map)
-    return page_map

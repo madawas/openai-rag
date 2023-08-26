@@ -5,7 +5,8 @@ from oairag import models, schemas
 
 _engine = create_engine(
     f"postgresql://{settings.postgres_user}:{settings.postgres_password}@{settings.postgres_host}"
-    f"/{settings.postgres_db}")
+    f"/{settings.postgres_db}"
+)
 
 _pg_session = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 

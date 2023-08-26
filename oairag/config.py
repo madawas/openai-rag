@@ -12,8 +12,11 @@ class Settings(BaseSettings):
         doc_upload_dir (DirectoryPath): Directory path for document uploads.
 
     """
-    model_config = SettingsConfigDict(env_file='.env', env_file_encoding='utf-8')
-    doc_upload_dir: DirectoryPath = Field(default='/Users/madawa/projects/openai-rag/test')
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    doc_upload_dir: DirectoryPath = Field(
+        default="/home/uploads"
+    )
     chunk_size: int = Field(default=1000)
     chunk_overlap: int = Field(default=300)
 

@@ -11,6 +11,7 @@ class UploadSuccessResponse(BaseModel):
     Attributes:
         document_id (UUID4): Id of the uploaded document
     """
+
     document_id: UUID4
 
 
@@ -24,7 +25,8 @@ class ErrorResponse(BaseModel):
         exception (str): String representing the exception details.
 
     """
-    status: str = 'error'
+
+    status: str = "error"
     message: str
     exception: str
 

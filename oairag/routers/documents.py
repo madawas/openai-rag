@@ -18,24 +18,23 @@ from oairag.models import UploadSuccessResponse, ErrorResponse, DocumentBase
 from oairag.prepdocs import process_document
 from oairag import database
 
-router = APIRouter(
-    prefix='/documents',
-    tags=['documents']
-)
+router = APIRouter(prefix="/documents", tags=["documents"])
 
 
 @router.post(
-    path='/upload',
-    summary='Upload a document to process',
-    description='Upload a document to extract the text, chunk it and embed the chunks and store '
-                'in a vector store',
+    path="/upload",
+    summary="Upload a document to process",
+    description="Upload a document to extract the text, chunk it and embed the chunks and store "
+    "in a vector store",
     status_code=status.HTTP_201_CREATED,
-    responses={500: {'model': ErrorResponse, 'description': 'Server Error'}}
+    responses={500: {"model": ErrorResponse, "description": "Server Error"}},
 )
-async def doc_upload(response: Response, background_tasks: BackgroundTasks,
-                     file: UploadFile = File(...), session: Session =
-                     Depends(database.get_db_session)) -> \
-        Union[UploadSuccessResponse, ErrorResponse]:
+async def doc_upload(
+    response: Response,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    session: Session = Depends(database.get_db_session)
+) -> Union[UploadSuccessResponse, ErrorResponse]:
     """
     Uploads a text document to be processed.
 
@@ -56,29 +55,24 @@ async def doc_upload(response: Response, background_tasks: BackgroundTasks,
     of 1MB and asynchronously written to the file path. Any exceptions that occur during the upload
     process are caught and handled by modifying the response object's status code and returning an
     ErrorResponse. If the upload is successful, a SuccessResponse is returned.
-
-    Note:
-        Make sure to configure the `settings.model_dump()` and `settings.doc_upload_dir`
-        appropriately.
-
-
     """
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
 
     try:
-        async with aiofiles.open(file_path, 'wb') as f:
+        async with aiofiles.open(file_path, "wb") as f:
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
     except Exception as e:
         response.status_code = 500
-        return ErrorResponse(message=f'Error occurred while uploading {file.filename}',
-                             exception=repr(e))
+        return ErrorResponse(
+            message=f"Error occurred while uploading {file.filename}", exception=repr(e)
+        )
     finally:
         await file.close()
     # todo: check conflict
     document = DocumentBase(
         file_name=file.filename,
-        name_hash=hashlib.sha256(file.filename.encode('utf-8')).hexdigest()
+        name_hash=hashlib.sha256(file.filename.encode("utf-8")).hexdigest(),
     )
     document_id = database.add_document(session, document)
     background_tasks.add_task(process_document, file_path)
