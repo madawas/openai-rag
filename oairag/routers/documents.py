@@ -70,8 +70,11 @@ async def doc_upload(
 
 
 def _add_document_entry(filename: str, session: Session) -> DocumentResponse:
-    document = database.add_document(session, DocumentDTO(
-        file_name=filename,
-        name_hash=hashlib.sha256(filename.encode("utf-8")).hexdigest(),
-    ))
+    document = database.add_document(
+        session,
+        DocumentDTO(
+            file_name=filename,
+            name_hash=hashlib.sha256(filename.encode("utf-8")).hexdigest(),
+        ),
+    )
     return DocumentResponse.model_validate(document, from_attributes=True)
