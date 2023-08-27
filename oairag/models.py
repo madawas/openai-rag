@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Union
 from pydantic import BaseModel, ConfigDict, UUID4
 
 
@@ -16,7 +15,7 @@ class ErrorResponse(BaseModel):
 
     status: str = "error"
     message: str
-    exception: str
+    exception: str | None = None
 
 
 class ProcStatus(str, Enum):
@@ -25,23 +24,11 @@ class ProcStatus(str, Enum):
     ERROR = "error"
 
 
-class DocumentResponse(BaseModel):
-    id: UUID4
-    file_name: str
-    process_status: ProcStatus
-    process_description: Union[str, None]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class DocumentDTO(BaseModel):
     id: UUID4 = None
     file_name: str
-    name_hash: str
-    content_hash: Union[str, None] = None
     process_status: ProcStatus = ProcStatus.PENDING
-    process_description: Union[str, None] = None
-    user_id: Union[str, None] = None
-    collection_id: Union[str, None] = None
+    process_description: str | None = None
+    collection_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

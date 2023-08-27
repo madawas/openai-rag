@@ -14,3 +14,4 @@ langchain~=0.0.271
 openai~=0.27.9
 psycopg2-binary~=2.9.7
 pgvector~=0.2.1
+tiktoken~=0.4.0

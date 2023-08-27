@@ -1,12 +1,6 @@
-from enum import Enum
 from typing import Union, Optional
 from pydantic import DirectoryPath, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-class IndexStrategy(str, Enum):
-    # todo: add support to document, user_managed and user strategies
-    SINGLE_INDEX = "single_index"
 
 
 class Settings(BaseSettings):
@@ -33,8 +27,7 @@ class Settings(BaseSettings):
     postgres_host: str = Field(default="db")
     postgres_db: str = Field(default="oai_demo_vdb")
 
-    index_strategy: IndexStrategy = IndexStrategy.SINGLE_INDEX
-    default_index: str = Field(default="oairag_index")
+    default_collection: str = Field(default="oairag_default_collection")
 
 
 settings = Settings()

@@ -106,13 +106,13 @@ def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
     )
 
 
-def _generate_vectors(chunks: list[Document]):
+def _generate_vectors_and_store(chunks: list[Document]):
     vector_store = get_vector_store(_EMBEDDINGS)
     if settings.openai_api_type == "azure" or settings.openai_api_type == "azure_ad":
         for chunk in chunks:
-            vector_store.aadd_documents([chunk])
+            vector_store.add_documents([chunk])
     else:
-        vector_store.aadd_documents(chunks)
+        vectors = vector_store.add_documents(chunks)
 
 
 def process_document(file_path: str):
@@ -126,6 +126,6 @@ def process_document(file_path: str):
     file_format = _get_file_format(file_path)
     chunks = _load_and_split_content(file_path, file_format)
     LOG.debug(len(chunks))
-    _generate_vectors(chunks)
+    _generate_vectors_and_store(chunks)
 
     LOG.debug("%s processing complete", file_path)
