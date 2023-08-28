@@ -54,7 +54,7 @@ def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
     :param file_path: The path of the file to process.
     :param file_format: The format of the file.
 
-    :returns list[Document]: A list of Document objects containing the split content.
+    :returns list[DocumentDTO]: A list of DocumentDTO objects containing the split content.
 
     :raises UnsupportedFileFormatException: If the file format is not supported.
     """

@@ -1,6 +1,6 @@
 import logging
+import math
 import os
-from typing import Union
 from sqlalchemy.orm import Session
 import aiofiles
 from fastapi import (
@@ -8,6 +8,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Request,
     Response,
     status,
     UploadFile,
@@ -15,13 +16,49 @@ from fastapi import (
 from fastapi.exceptions import HTTPException
 
 from oairag.config import settings
-from oairag.models import ErrorResponse, DocumentDTO
+from oairag.models import (
+    ErrorResponse,
+    DocumentDTO,
+    DocumentListDTO,
+    Links,
+    Meta,
+)
 from oairag.prepdocs import process_document
 from oairag import database
 
 LOG = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+
+db_session = Depends(database.get_db_session)
+
+
+@router.get(
+    path="",
+    summary="Get list of documents",
+    responses={
+        200: {"model": DocumentListDTO, "description": "Success"},
+        500: {"model": ErrorResponse, "description": "Internal Server Error"},
+    },
+)
+def get_documents(
+    request: Request,
+    response: Response,
+    page: int = 1,
+    size: int = 20,
+    session: Session = db_session,
+):
+    try:
+        return __get_document_list(session, request, page, size)
+    except HTTPException as e:
+        response.status_code = e.status_code
+        return ErrorResponse(message=e.detail)
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return ErrorResponse(
+            message=f"Error occurred while fetching documents",
+            exception=repr(e),
+        )
 
 
 @router.post(
@@ -40,10 +77,11 @@ async def doc_upload(
     response: Response,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    session: Session = Depends(database.get_db_session),
+    session: Session = db_session,
 ):
     """
-    Uploads a text document to be processed.
+    Uploads a text document to be processed. Uploaded document will be stored in a document store
+    and processed to extract text and store in a vector store as embeddings.
 
     :param response: (Response): The FastAPI Response object to modify in case of errors.
     :param background_tasks: (BackgroundTasks): Asynchronous processing tasks to run on
@@ -61,14 +99,14 @@ async def doc_upload(
         if document is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Document already exist with the id: {document.id}",
+                detail=f"DocumentDTO already exist with the id: {document.id}",
             )
 
         async with aiofiles.open(file_path, "wb") as f:
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
 
-        document = _add_document_entry(file.filename, session)
+        document = __add_document_entry(session, file.filename)
         background_tasks.add_task(process_document, file_path)
         return document
     except HTTPException as e:
@@ -83,8 +121,67 @@ async def doc_upload(
         await file.close()
 
 
-def _add_document_entry(filename: str, session: Session) -> DocumentDTO:
+@router.get(
+    path="/{document_id}",
+    summary="Get document details by document id",
+    responses={
+        200: {"model": DocumentDTO, "description": "Success"},
+        500: {"model": ErrorResponse, "description": "Internal Server Error"},
+        404: {"model": ErrorResponse, "description": "Not Found"},
+    },
+)
+def get_document(response: Response, document_id: str, session: Session = db_session):
+    try:
+        document = database.get_document_by_id(session, document_id)
+        if document is None:
+            raise HTTPException(
+                status_code=404, detail=f"DocumentDTO: {document_id} not found"
+            )
+        else:
+            return document
+    except HTTPException as e:
+        response.status_code = e.status_code
+        return ErrorResponse(message=e.detail)
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return ErrorResponse(
+            message=f"Error occurred while retrieving the document with id: {document_id}",
+            exception=repr(e),
+        )
+
+
+def __add_document_entry(session: Session, filename: str) -> DocumentDTO:
     return database.add_document(
         session,
         DocumentDTO(file_name=filename),
     )
+
+
+def __get_document_list(
+    session: Session, request: Request, page: int = 1, size: int = 20
+) -> DocumentListDTO:
+    total_records = database.get_document_count(session)
+    total_pages = math.ceil(total_records / size)
+    documents = database.get_documents(session, page - 1, size)
+
+    if page > total_pages:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect page value. Page value {page} cannot be greater than {total_pages}",
+        )
+
+    prev_page = None if page <= 1 else f"{request.base_url}?page={page-1}&size={size}"
+    next_page = (
+        None if page >= total_pages else f"{request.base_url}?page={page+1}&size={size}"
+    )
+
+    links = Links(
+        current_page=f"{request.base_url}documents?page={page}&size={size}",
+        first_page=f"{request.base_url}?page=1&size={size}",
+        prev_page=prev_page,
+        next_page=next_page,
+        last_page=f"{request.base_url}?page={total_pages}&size={size}",
+    )
+    meta = Meta(total_records=total_records, total_pages=total_pages)
+
+    return DocumentListDTO(documents=documents, links=links, meta=meta)

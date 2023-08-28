@@ -1,5 +1,5 @@
 from enum import Enum
-from pydantic import BaseModel, ConfigDict, UUID4
+from pydantic import BaseModel, ConfigDict, UUID4, HttpUrl
 
 
 class ErrorResponse(BaseModel):
@@ -32,3 +32,22 @@ class DocumentDTO(BaseModel):
     collection_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class Links(BaseModel):
+    current_page: HttpUrl
+    first_page: HttpUrl
+    prev_page: HttpUrl | None
+    next_page: HttpUrl | None
+    last_page: HttpUrl
+
+
+class Meta(BaseModel):
+    total_records: int
+    total_pages: int
+
+
+class DocumentListDTO(BaseModel):
+    documents: list[DocumentDTO]
+    links: Links
+    meta: Meta
