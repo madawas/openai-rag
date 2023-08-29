@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 import aiofiles
 from fastapi import (
     APIRouter,
@@ -41,15 +41,15 @@ db_session = Depends(database.get_db_session)
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
     },
 )
-def get_documents(
+async def get_documents(
     request: Request,
     response: Response,
     page: int = 1,
     size: int = 20,
-    session: Session = db_session,
+    session: AsyncSession = db_session,
 ):
     try:
-        return __get_document_list(session, request, page, size)
+        return await __get_document_list(session, request, page, size)
     except HTTPException as e:
         response.status_code = e.status_code
         return ErrorResponse(message=e.detail)
@@ -77,7 +77,7 @@ async def doc_upload(
     response: Response,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    session: Session = db_session,
+    session: AsyncSession = db_session,
 ):
     """
     Uploads a text document to be processed. Uploaded document will be stored in a document store
@@ -95,7 +95,7 @@ async def doc_upload(
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
 
     try:
-        document = database.get_document_by_filename(session, file.filename)
+        document = await database.get_document_by_filename(session, file.filename)
         if document is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -106,7 +106,7 @@ async def doc_upload(
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
 
-        document = __add_document_entry(session, file.filename)
+        document = await __add_document_entry(session, file.filename)
         background_tasks.add_task(process_document, file_path)
         return document
     except HTTPException as e:
@@ -130,9 +130,11 @@ async def doc_upload(
         404: {"model": ErrorResponse, "description": "Not Found"},
     },
 )
-def get_document(response: Response, document_id: str, session: Session = db_session):
+async def get_document(
+    response: Response, document_id: str, session: AsyncSession = db_session
+):
     try:
-        document = database.get_document_by_id(session, document_id)
+        document = await database.get_document_by_id(session, document_id)
         if document is None:
             raise HTTPException(
                 status_code=404, detail=f"DocumentDTO: {document_id} not found"
@@ -150,19 +152,20 @@ def get_document(response: Response, document_id: str, session: Session = db_ses
         )
 
 
-def __add_document_entry(session: Session, filename: str) -> DocumentDTO:
-    return database.add_document(
+async def __add_document_entry(session: AsyncSession, filename: str) -> DocumentDTO:
+    result = await database.add_document(
         session,
         DocumentDTO(file_name=filename),
     )
+    return DocumentDTO.model_validate(result)
 
 
-def __get_document_list(
-    session: Session, request: Request, page: int = 1, size: int = 20
+async def __get_document_list(
+    session: AsyncSession, request: Request, page: int = 1, size: int = 20
 ) -> DocumentListDTO:
-    total_records = database.get_document_count(session)
+    total_records = await database.get_document_count(session)
     total_pages = math.ceil(total_records / size)
-    documents = database.get_documents(session, page - 1, size)
+    documents = await database.get_documents(session, page - 1, size)
 
     if page > total_pages:
         raise HTTPException(

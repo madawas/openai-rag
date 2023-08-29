@@ -23,8 +23,8 @@ from .database import get_vector_store
 from .exceptions import UnsupportedFileFormatException
 
 LOG = logging.getLogger(__name__)
-_EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
-_FILE_FORMAT_DICT = {
+__EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
+__FILE_FORMAT_DICT = {
     "md": "markdown",
     "txt": "text",
     "html": "html",
@@ -34,7 +34,7 @@ _FILE_FORMAT_DICT = {
 }
 
 
-def _get_file_format(file_path: str) -> Optional[str]:
+def __get_file_format(file_path: str) -> Optional[str]:
     """
     Extracts the file format from a given file path.
 
@@ -44,10 +44,10 @@ def _get_file_format(file_path: str) -> Optional[str]:
     """
     file_path = os.path.basename(file_path)
     file_extension = file_path.split(".")[-1]
-    return _FILE_FORMAT_DICT.get(file_extension, None)
+    return __FILE_FORMAT_DICT.get(file_extension, None)
 
 
-def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
+def __load_and_split_content(file_path: str, file_format: str) -> list[Document]:
     """
     Loads and splits the content of a file based on the given file format.
 
@@ -106,16 +106,17 @@ def _load_and_split_content(file_path: str, file_format: str) -> list[Document]:
     )
 
 
-def _generate_vectors_and_store(chunks: list[Document]):
-    vector_store = get_vector_store(_EMBEDDINGS)
+async def __generate_vectors_and_store(chunks: list[Document]):
+    vector_store = get_vector_store(__EMBEDDINGS)
     if settings.openai_api_type == "azure" or settings.openai_api_type == "azure_ad":
         for chunk in chunks:
+            # Async Add documents is not yet implemented for PGVector
             vector_store.add_documents([chunk])
     else:
-        vectors = vector_store.add_documents(chunks)
+        vector_store.add_documents(chunks)
 
 
-def process_document(file_path: str):
+async def process_document(file_path: str):
     """
     Processes an uploaded document. Runs the flow to chunk the file content and embed the text
     chunks and store it in a vector collection with other metadata
@@ -123,9 +124,10 @@ def process_document(file_path: str):
     :param file_path: Absolute path of the uploaded document to process
     """
     LOG.debug("Processing document: %s", file_path)
-    file_format = _get_file_format(file_path)
-    chunks = _load_and_split_content(file_path, file_format)
-    LOG.debug(len(chunks))
-    _generate_vectors_and_store(chunks)
+    file_format = __get_file_format(file_path)
+    chunks = __load_and_split_content(file_path, file_format)
+    LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
+    await __generate_vectors_and_store(chunks)
 
+    # todo: update document here
     LOG.debug("%s processing complete", file_path)
