@@ -1,13 +1,15 @@
 import logging
 import math
 import os
-from sqlalchemy.ext.asyncio import AsyncSession
 import aiofiles
+from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import (
     APIRouter,
     BackgroundTasks,
     Depends,
     File,
+    Form,
     Request,
     Response,
     status,
@@ -24,13 +26,13 @@ from oairag.models import (
     Meta,
 )
 from oairag.prepdocs import process_document
-from oairag import database
+from oairag.database import DocumentDAO, get_db_session
 
 LOG = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-db_session = Depends(database.get_db_session)
+db_session = Depends(get_db_session)
 
 
 @router.get(
@@ -49,7 +51,8 @@ async def get_documents(
     session: AsyncSession = db_session,
 ):
     try:
-        return await __get_document_list(session, request, page, size)
+        document_dao = DocumentDAO(session)
+        return await __get_document_list(document_dao, request, page, size)
     except HTTPException as e:
         response.status_code = e.status_code
         return ErrorResponse(message=e.detail)
@@ -77,6 +80,7 @@ async def doc_upload(
     response: Response,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    collection: Optional[str] = Form(...),
     session: AsyncSession = db_session,
 ):
     """
@@ -87,6 +91,7 @@ async def doc_upload(
     :param background_tasks: (BackgroundTasks): Asynchronous processing tasks to run on
     uploaded docs.
     :param  file: (UploadFile): The UploadFile object representing the uploaded file.
+    :param collection: Optional[str]: Collection which the document is added to
     :param session: Database session
 
     :returns Union[DocumentDTO, ErrorResponse]: Returns an ErrorResponse object if an error
@@ -95,7 +100,8 @@ async def doc_upload(
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
 
     try:
-        document = await database.get_document_by_filename(session, file.filename)
+        document_dao = DocumentDAO(session)
+        document = await document_dao.get_document_by_filename(file.filename)
         if document is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
@@ -106,8 +112,8 @@ async def doc_upload(
             while contents := await file.read(1024 * 1024):
                 await f.write(contents)
 
-        document = await __add_document_entry(session, file.filename)
-        background_tasks.add_task(process_document, file_path)
+        document = await __add_document_entry(document_dao, file.filename, collection)
+        background_tasks.add_task(process_document, document_dao, file_path, collection)
         return document
     except HTTPException as e:
         response.status_code = e.status_code
@@ -134,7 +140,8 @@ async def get_document(
     response: Response, document_id: str, session: AsyncSession = db_session
 ):
     try:
-        document = await database.get_document_by_id(session, document_id)
+        document_dao = DocumentDAO(session)
+        document = await document_dao.get_document_by_id(document_id)
         if document is None:
             raise HTTPException(
                 status_code=404, detail=f"DocumentDTO: {document_id} not found"
@@ -152,20 +159,23 @@ async def get_document(
         )
 
 
-async def __add_document_entry(session: AsyncSession, filename: str) -> DocumentDTO:
-    result = await database.add_document(
-        session,
-        DocumentDTO(file_name=filename),
+async def __add_document_entry(
+    document_dao: DocumentDAO,
+    filename: str,
+    collection: str = settings.default_collection,
+) -> DocumentDTO:
+    result = await document_dao.add_document(
+        DocumentDTO(file_name=filename, collection_name=collection),
     )
     return DocumentDTO.model_validate(result)
 
 
 async def __get_document_list(
-    session: AsyncSession, request: Request, page: int = 1, size: int = 20
+    document_dao: DocumentDAO, request: Request, page: int = 1, size: int = 20
 ) -> DocumentListDTO:
-    total_records = await database.get_document_count(session)
+    total_records = await document_dao.get_document_count()
     total_pages = math.ceil(total_records / size)
-    documents = await database.get_documents(session, page - 1, size)
+    documents = await document_dao.get_documents(page - 1, size)
 
     if page > total_pages:
         raise HTTPException(

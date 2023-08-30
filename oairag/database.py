@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from langchain.vectorstores import PGVector
 
 from oairag.config import settings
-from oairag.dao import DocumentDAO
-from oairag.models import DocumentDTO
+from oairag.schema import DocumentRecord
+from oairag.models import DocumentDTO, ProcStatus
 
 LOG = logging.getLogger(__name__)
 
@@ -44,45 +44,61 @@ def get_vector_store(
     return vector_store
 
 
-async def add_document(session: AsyncSession, document: DocumentDTO) -> DocumentDAO:
-    doc_entry = DocumentDAO(
-        file_name=document.file_name,
-        process_status=document.process_status,
-    )
+class DocumentDAO(object):
+    def __init__(self, session: AsyncSession):
+        self.session = session
 
-    session.add(doc_entry)
-    await session.commit()
-    await session.refresh(doc_entry)
+    async def add_document(self, document: DocumentDTO) -> DocumentRecord:
+        doc_entry = DocumentRecord(
+            file_name=document.file_name,
+            process_status=document.process_status,
+            collection_name=document.collection_name,
+        )
 
-    return doc_entry
+        self.session.add(doc_entry)
+        await self.session.commit()
+        await self.session.refresh(doc_entry)
 
+        return doc_entry
 
-async def get_documents(
-    session: AsyncSession, page: int = 0, size: int = 20
-) -> Sequence[DocumentDAO]:
-    records = await session.execute(select(DocumentDAO).offset(page * size).limit(size))
-    return records.scalars().all()
+    async def get_documents(
+        self, page: int = 0, size: int = 20
+    ) -> Sequence[DocumentRecord]:
+        records = await self.session.execute(
+            select(DocumentRecord).offset(page * size).limit(size)
+        )
+        return records.scalars().all()
 
+    async def get_document_count(self) -> int:
+        result = await self.session.execute(func.count(DocumentRecord.id))
+        return result.scalar()
 
-async def get_document_count(session: AsyncSession) -> int:
-    result = await session.execute(func.count(DocumentDAO.id))
-    return result.scalar()
+    async def get_document_by_filename(self, filename: str) -> DocumentRecord | None:
+        records = await self.session.execute(
+            select(DocumentRecord).where(DocumentRecord.file_name == filename)
+        )
 
+        return records.scalar_one_or_none()
 
-async def get_document_by_filename(
-    session: AsyncSession, filename: str
-) -> DocumentDAO | None:
-    records = await session.execute(
-        select(DocumentDAO).where(DocumentDAO.file_name == filename)
-    )
+    async def get_document_by_id(self, document_id: str) -> DocumentRecord | None:
+        records = await self.session.execute(
+            select(DocumentRecord).where(DocumentRecord.id == document_id)
+        )
+        return records.scalars().one_or_none()
 
-    return records.scalar_one_or_none()
+    async def update_document_process_status(
+        self, filename: str, status: ProcStatus, description: str | None
+    ) -> DocumentRecord:
+        if filename is None:
+            raise ValueError("File name is empty")
 
+        document = await self.get_document_by_filename(filename)
 
-async def get_document_by_id(
-    session: AsyncSession, document_id: str
-) -> DocumentDAO | None:
-    records = await session.execute(
-        select(DocumentDAO).where(DocumentDAO.id == document_id)
-    )
-    return records.scalars().one_or_none()
+        if document is None:
+            raise ValueError(f"Cannot find a document with the filename: [{filename}]")
+
+        document.process_status = status
+        document.process_description = description
+        await self.session.commit()
+        await self.session.refresh(document)
+        return document

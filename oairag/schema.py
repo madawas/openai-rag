@@ -6,7 +6,7 @@ class Base(DeclarativeBase):
     pass
 
 
-class DocumentDAO(Base):
+class DocumentRecord(Base):
     __tablename__ = "documents"
 
     id: Mapped[UUID4] = mapped_column(

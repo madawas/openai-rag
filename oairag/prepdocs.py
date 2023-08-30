@@ -19,8 +19,10 @@ from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
 
 from .config import settings
-from .database import get_vector_store
+from . import database
+from .database import DocumentDAO
 from .exceptions import UnsupportedFileFormatException
+from .models import ProcStatus
 
 LOG = logging.getLogger(__name__)
 __EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
@@ -106,8 +108,8 @@ def __load_and_split_content(file_path: str, file_format: str) -> list[Document]
     )
 
 
-async def __generate_vectors_and_store(chunks: list[Document]):
-    vector_store = get_vector_store(__EMBEDDINGS)
+async def __generate_vectors_and_store(chunks: list[Document], collection: str):
+    vector_store = database.get_vector_store(__EMBEDDINGS, collection)
     if settings.openai_api_type == "azure" or settings.openai_api_type == "azure_ad":
         for chunk in chunks:
             # Async Add documents is not yet implemented for PGVector
@@ -116,18 +118,28 @@ async def __generate_vectors_and_store(chunks: list[Document]):
         vector_store.add_documents(chunks)
 
 
-async def process_document(file_path: str):
+async def process_document(document_dao: DocumentDAO, file_path: str, collection: str):
     """
     Processes an uploaded document. Runs the flow to chunk the file content and embed the text
     chunks and store it in a vector collection with other metadata
 
-    :param file_path: Absolute path of the uploaded document to process
+    :param document_dao: (DocumentDAO): Document data access object
+    :param file_path: (str): Absolute path of the uploaded document to process
+    :param collection: (str): Collection which the document to be added
     """
     LOG.debug("Processing document: %s", file_path)
-    file_format = __get_file_format(file_path)
-    chunks = __load_and_split_content(file_path, file_format)
-    LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
-    await __generate_vectors_and_store(chunks)
-
-    # todo: update document here
+    try:
+        file_format = __get_file_format(file_path)
+        chunks = __load_and_split_content(file_path, file_format)
+        LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
+        await __generate_vectors_and_store(chunks, collection)
+        await document_dao.update_document_process_status(
+            os.path.basename(file_path),
+            ProcStatus.COMPLETE,
+            None,
+        )
+    except Exception as e:
+        await document_dao.update_document_process_status(
+            os.path.basename(file_path), ProcStatus.ERROR, repr(e)
+        )
     LOG.debug("%s processing complete", file_path)
