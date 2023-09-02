@@ -3,7 +3,9 @@ create table documents (
     file_name varchar(200) unique not null,
     process_status varchar(20) not null,
     process_description varchar(150),
-    collection_name varchar,
+    collection_name varchar(100),
+    summary varchar(1000),
+    vectors varchar(36)[],
     constraint documents_pkey primary key (id)
 );
 create table langchain_pg_collection (

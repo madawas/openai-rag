@@ -24,7 +24,7 @@ class ProcStatus(str, Enum):
     ERROR = "error"
 
 
-class DocumentDTO(BaseModel):
+class DocumentResponse(BaseModel):
     id: UUID4 = None
     file_name: str
     process_status: ProcStatus = ProcStatus.PENDING
@@ -32,6 +32,24 @@ class DocumentDTO(BaseModel):
     collection_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentWithMetadata(BaseModel):
+    id: UUID4 = None
+    file_name: str
+    process_status: ProcStatus = ProcStatus.PENDING
+    process_description: str | None = None
+    collection_name: str | None = None
+    summary: str | None = None
+    vectors: list[str] | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SummaryResponse(BaseModel):
+    document_id: UUID4
+    file_name: str
+    summary: str
 
 
 class Links(BaseModel):
@@ -47,7 +65,7 @@ class Meta(BaseModel):
     total_pages: int
 
 
-class DocumentListDTO(BaseModel):
-    documents: list[DocumentDTO]
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentResponse]
     links: Links
     meta: Meta

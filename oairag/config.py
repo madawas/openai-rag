@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_api_type: Optional[Union[str, None]] = None
     openai_api_version: Optional[Union[str, None]] = None
+    openai_default_embeddings_model: str = Field(default="text-embedding-ada-002")
 
     postgres_user: str = Field(default="postgres")
     postgres_password: str = Field(default="postgres")

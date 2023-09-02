@@ -8,6 +8,8 @@ import logging
 import os
 from typing import Optional
 
+from langchain import OpenAI
+from langchain.chains.summarize import load_summarize_chain
 from langchain.document_loaders import (
     PyPDFLoader,
     TextLoader,
@@ -20,9 +22,9 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
 
 from .config import settings
 from . import database
-from .database import DocumentDAO
+from .database import DocumentDAO, EmbeddingsDAO
 from .exceptions import UnsupportedFileFormatException
-from .models import ProcStatus
+from .models import ProcStatus, DocumentWithMetadata
 
 LOG = logging.getLogger(__name__)
 __EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
@@ -56,7 +58,7 @@ def __load_and_split_content(file_path: str, file_format: str) -> list[Document]
     :param file_path: The path of the file to process.
     :param file_format: The format of the file.
 
-    :returns list[DocumentDTO]: A list of DocumentDTO objects containing the split content.
+    :returns list[DocumentResponse]: A list of DocumentResponse objects containing the split content.
 
     :raises UnsupportedFileFormatException: If the file format is not supported.
     """
@@ -108,14 +110,40 @@ def __load_and_split_content(file_path: str, file_format: str) -> list[Document]
     )
 
 
-async def __generate_vectors_and_store(chunks: list[Document], collection: str):
+async def __generate_vectors_and_store(
+    chunks: list[Document], collection: str
+) -> list[str]:
     vector_store = database.get_vector_store(__EMBEDDINGS, collection)
     if settings.openai_api_type == "azure" or settings.openai_api_type == "azure_ad":
         for chunk in chunks:
             # Async Add documents is not yet implemented for PGVector
-            vector_store.add_documents([chunk])
+            # todo: pass document id as the custom id and remove vector list
+            return vector_store.add_documents([chunk])
     else:
-        vector_store.add_documents(chunks)
+        return vector_store.add_documents(chunks)
+
+
+async def __run_summarize_chain(
+    docs: list[Document], llm: OpenAI = None, **kwargs
+) -> str:
+    if llm is None:
+        chain = load_summarize_chain(
+            llm=get_llm_model(), chain_type=kwargs.get("chain_type", "refine")
+        )
+    else:
+        chain = load_summarize_chain(
+            llm=llm, chain_type=kwargs.get("chain_type", "refine")
+        )
+
+    return await chain.arun(docs)
+
+
+def get_embeddings_function():
+    return __EMBEDDINGS
+
+
+def get_llm_model(**kwargs):
+    return OpenAI(openai_api_key=settings.openai_api_key, **kwargs)
 
 
 async def process_document(document_dao: DocumentDAO, file_path: str, collection: str):
@@ -132,14 +160,32 @@ async def process_document(document_dao: DocumentDAO, file_path: str, collection
         file_format = __get_file_format(file_path)
         chunks = __load_and_split_content(file_path, file_format)
         LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
-        await __generate_vectors_and_store(chunks, collection)
-        await document_dao.update_document_process_status(
-            os.path.basename(file_path),
-            ProcStatus.COMPLETE,
-            None,
+        vectors = await __generate_vectors_and_store(chunks, collection)
+        await document_dao.update_document(
+            DocumentWithMetadata(
+                file_name=os.path.basename(file_path),
+                process_status=ProcStatus.COMPLETE,
+                vectors=vectors,
+            )
         )
     except Exception as e:
-        await document_dao.update_document_process_status(
-            os.path.basename(file_path), ProcStatus.ERROR, repr(e)
+        await document_dao.update_document(
+            DocumentWithMetadata(
+                file_name=os.path.basename(file_path),
+                process_status=ProcStatus.ERROR,
+                vectors=repr(e),
+            )
         )
     LOG.debug("%s processing complete", file_path)
+
+
+async def summarize(
+    embeddings_dao: EmbeddingsDAO, document: DocumentWithMetadata
+) -> DocumentWithMetadata:
+    embeddings = await embeddings_dao.get_embeddings(document.vectors)
+    # todo: finish the summary
+
+    for e in embeddings:
+        LOG.debug(e.cmetadata)
+
+    return document

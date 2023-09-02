@@ -1,13 +1,16 @@
 import logging
-from typing import Sequence
+from typing import Sequence, Optional
 
-from sqlalchemy import select, func
+from pgvector.sqlalchemy import Vector
+from pydantic import UUID4
+from sqlalchemy import select, func, String, ForeignKey
+from sqlalchemy.dialects.postgresql import ARRAY, JSON
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from langchain.vectorstores import PGVector
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from oairag.config import settings
-from oairag.schema import DocumentRecord
-from oairag.models import DocumentDTO, ProcStatus
+from oairag.models import DocumentResponse, DocumentWithMetadata
 
 LOG = logging.getLogger(__name__)
 
@@ -44,11 +47,52 @@ def get_vector_store(
     return vector_store
 
 
+class Base(DeclarativeBase):
+    type_annotation_map = {list[str]: ARRAY(String), dict: JSON, list[float]: Vector}
+
+
+class DocumentRecord(Base):
+    __tablename__ = "documents"
+
+    id: Mapped[UUID4] = mapped_column(
+        primary_key=True, index=True, server_default="uuid_generate_v4()"
+    )
+    file_name: Mapped[str] = mapped_column(unique=True)
+    process_status: Mapped[str]
+    process_description: Mapped[Optional[str]]
+    collection_name: Mapped[str]
+    summary: Mapped[Optional[str]]
+    vectors: Mapped[Optional[list[str]]]
+
+
+class Collection(Base):
+    __tablename__ = "langchain_pg_collection"
+    uuid: Mapped[UUID4] = mapped_column(primary_key=True)
+    name: Mapped[str]
+    cmetadata: Mapped[dict]
+    embeddings: Mapped["Embedding"] = relationship(
+        back_populates="collection",
+        passive_deletes=True,
+    )
+
+
+class Embedding(Base):
+    __tablename__ = "langchain_pg_embedding"
+    uuid: Mapped[UUID4] = mapped_column(primary_key=True)
+    collection_id: Mapped[UUID4] = mapped_column(
+        ForeignKey("langchain_pg_collection.uuid")
+    )
+    collection: Mapped["Collection"] = relationship(back_populates="embeddings")
+    embedding = mapped_column(Vector(1536))
+    document: Mapped[str]
+    cmetadata: Mapped[dict]
+
+
 class DocumentDAO(object):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def add_document(self, document: DocumentDTO) -> DocumentRecord:
+    async def add_document(self, document: DocumentResponse) -> DocumentRecord:
         doc_entry = DocumentRecord(
             file_name=document.file_name,
             process_status=document.process_status,
@@ -86,19 +130,55 @@ class DocumentDAO(object):
         )
         return records.scalars().one_or_none()
 
-    async def update_document_process_status(
-        self, filename: str, status: ProcStatus, description: str | None
-    ) -> DocumentRecord:
-        if filename is None:
+    async def update_document(self, document: DocumentWithMetadata) -> DocumentRecord:
+        if document.file_name is None:
             raise ValueError("File name is empty")
 
-        document = await self.get_document_by_filename(filename)
+        existing_document = await self.get_document_by_filename(document.file_name)
 
-        if document is None:
-            raise ValueError(f"Cannot find a document with the filename: [{filename}]")
+        if existing_document is None:
+            raise ValueError(
+                f"Cannot find a document with the filename: [{document.file_name}]"
+            )
 
-        document.process_status = status
-        document.process_description = description
+        if (
+            existing_document.process_status != document.process_status
+            and document.process_status is not None
+        ):
+            existing_document.process_status = document.process_status
+
+        if (
+            existing_document.process_description != document.process_description
+            and document.process_description is not None
+        ):
+            existing_document.process_description = document.process_description
+
+        if (
+            existing_document.summary != document.summary
+            and document.summary is not None
+        ):
+            existing_document.summary = document.summary
+
+        if (
+            existing_document.vectors != document.vectors
+            and document.vectors is not None
+        ):
+            existing_document.vectors = document.vectors
+
         await self.session.commit()
-        await self.session.refresh(document)
-        return document
+        await self.session.refresh(existing_document)
+        return existing_document
+
+
+class EmbeddingsDAO(object):
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_embeddings(self, vectors: list[str]) -> Sequence[Embedding]:
+        records = await self.session.execute(
+            select(Embedding).where(Embedding.uuid.in_(vectors))
+        )
+        embeddings = records.scalars().all()
+        LOG.debug(len(embeddings))
+
+        return embeddings

@@ -20,13 +20,15 @@ from fastapi.exceptions import HTTPException
 from oairag.config import settings
 from oairag.models import (
     ErrorResponse,
-    DocumentDTO,
-    DocumentListDTO,
+    DocumentResponse,
+    DocumentListResponse,
     Links,
     Meta,
+    SummaryResponse,
+    DocumentWithMetadata,
 )
-from oairag.prepdocs import process_document
-from oairag.database import DocumentDAO, get_db_session
+from oairag.prepdocs import process_document, summarize
+from oairag.database import DocumentDAO, get_db_session, EmbeddingsDAO
 
 LOG = logging.getLogger(__name__)
 
@@ -39,7 +41,7 @@ db_session = Depends(get_db_session)
     path="",
     summary="Get list of documents",
     responses={
-        200: {"model": DocumentListDTO, "description": "Success"},
+        200: {"model": DocumentListResponse, "description": "Success"},
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
     },
 )
@@ -71,7 +73,7 @@ async def get_documents(
     "in a vector store",
     status_code=status.HTTP_201_CREATED,
     responses={
-        201: {"model": DocumentDTO, "description": "Success"},
+        201: {"model": DocumentResponse, "description": "Success"},
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
         409: {"model": ErrorResponse, "description": "Conflict"},
     },
@@ -94,8 +96,8 @@ async def doc_upload(
     :param collection: Optional[str]: Collection which the document is added to
     :param session: Database session
 
-    :returns Union[DocumentDTO, ErrorResponse]: Returns an ErrorResponse object if an error
-    occurs, otherwise returns a DocumentDTO.
+    :returns Union[DocumentResponse, ErrorResponse]: Returns an ErrorResponse object if an error
+    occurs, otherwise returns a DocumentResponse.
     """
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
 
@@ -105,7 +107,7 @@ async def doc_upload(
         if document is not None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"DocumentDTO already exist with the id: {document.id}",
+                detail=f"DocumentResponse already exist with the id: {document.id}",
             )
 
         async with aiofiles.open(file_path, "wb") as f:
@@ -131,7 +133,7 @@ async def doc_upload(
     path="/{document_id}",
     summary="Get document details by document id",
     responses={
-        200: {"model": DocumentDTO, "description": "Success"},
+        200: {"model": DocumentResponse, "description": "Success"},
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
         404: {"model": ErrorResponse, "description": "Not Found"},
     },
@@ -144,7 +146,7 @@ async def get_document(
         document = await document_dao.get_document_by_id(document_id)
         if document is None:
             raise HTTPException(
-                status_code=404, detail=f"DocumentDTO: {document_id} not found"
+                status_code=404, detail=f"DocumentResponse: {document_id} not found"
             )
         else:
             return document
@@ -159,20 +161,64 @@ async def get_document(
         )
 
 
+@router.get(
+    path="/{document_id}/summary",
+    summary="Get document summary",
+    responses={
+        200: {"model": SummaryResponse, "description": "Success"},
+        500: {"model": ErrorResponse, "description": "Internal Server Error"},
+        404: {"model": ErrorResponse, "description": "Not Found"},
+    },
+)
+async def get_document_summary(
+    response: Response,
+    background_tasks: BackgroundTasks,
+    document_id: str,
+    regenerate: bool = False,
+    session: AsyncSession = db_session,
+):
+    try:
+        document_dao = DocumentDAO(session)
+        ext_record = await document_dao.get_document_by_id(document_id)
+        if ext_record is None:
+            raise HTTPException(
+                status_code=404, detail=f"DocumentResponse: {document_id} not found"
+            )
+        else:
+            embeddings_dao = EmbeddingsDAO(session)
+            document = DocumentWithMetadata.model_validate(ext_record)
+            if regenerate or document.summary is None:
+                document = await summarize(embeddings_dao, document)
+                background_tasks.add_task(document_dao.update_document, document)
+                return document.summary
+            else:
+                return document.summary
+    except HTTPException as e:
+        response.status_code = e.status_code
+        return ErrorResponse(message=e.detail)
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return ErrorResponse(
+            message=f"Error occurred while retrieving the summary of the document with id:"
+            f" {document_id}",
+            exception=repr(e),
+        )
+
+
 async def __add_document_entry(
     document_dao: DocumentDAO,
     filename: str,
     collection: str = settings.default_collection,
-) -> DocumentDTO:
+) -> DocumentResponse:
     result = await document_dao.add_document(
-        DocumentDTO(file_name=filename, collection_name=collection),
+        DocumentResponse(file_name=filename, collection_name=collection),
     )
-    return DocumentDTO.model_validate(result)
+    return DocumentResponse.model_validate(result)
 
 
 async def __get_document_list(
     document_dao: DocumentDAO, request: Request, page: int = 1, size: int = 20
-) -> DocumentListDTO:
+) -> DocumentListResponse:
     total_records = await document_dao.get_document_count()
     total_pages = math.ceil(total_records / size)
     documents = await document_dao.get_documents(page - 1, size)
@@ -197,4 +243,4 @@ async def __get_document_list(
     )
     meta = Meta(total_records=total_records, total_pages=total_pages)
 
-    return DocumentListDTO(documents=documents, links=links, meta=meta)
+    return DocumentListResponse(documents=documents, links=links, meta=meta)
