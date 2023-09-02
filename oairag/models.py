@@ -41,7 +41,7 @@ class DocumentWithMetadata(BaseModel):
     process_description: str | None = None
     collection_name: str | None = None
     summary: str | None = None
-    vectors: list[str] | None = None
+    embeddings: list[str] | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

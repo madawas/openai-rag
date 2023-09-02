@@ -1,5 +1,5 @@
 import logging
-from typing import Sequence, Optional
+from typing import Sequence, Optional, List
 
 from pgvector.sqlalchemy import Vector
 from pydantic import UUID4
@@ -52,7 +52,7 @@ class Base(DeclarativeBase):
 
 
 class DocumentRecord(Base):
-    __tablename__ = "documents"
+    __tablename__ = "document"
 
     id: Mapped[UUID4] = mapped_column(
         primary_key=True, index=True, server_default="uuid_generate_v4()"
@@ -62,7 +62,9 @@ class DocumentRecord(Base):
     process_description: Mapped[Optional[str]]
     collection_name: Mapped[str]
     summary: Mapped[Optional[str]]
-    vectors: Mapped[Optional[list[str]]]
+    embeddings: Mapped[List["Embedding"]] = relationship(
+        back_populates="mapped_doc", passive_deletes=True
+    )
 
 
 class Collection(Base):
@@ -71,8 +73,7 @@ class Collection(Base):
     name: Mapped[str]
     cmetadata: Mapped[dict]
     embeddings: Mapped["Embedding"] = relationship(
-        back_populates="collection",
-        passive_deletes=True,
+        back_populates="collection", passive_deletes=True
     )
 
 
@@ -82,10 +83,12 @@ class Embedding(Base):
     collection_id: Mapped[UUID4] = mapped_column(
         ForeignKey("langchain_pg_collection.uuid")
     )
-    collection: Mapped["Collection"] = relationship(back_populates="embeddings")
     embedding = mapped_column(Vector(1536))
     document: Mapped[str]
+    custom_id: Mapped[UUID4] = mapped_column(ForeignKey("document.id"))
     cmetadata: Mapped[dict]
+    collection: Mapped["Collection"] = relationship(back_populates="embeddings")
+    mapped_doc: Mapped["DocumentRecord"] = relationship(back_populates="embeddings")
 
 
 class DocumentDAO(object):
@@ -159,26 +162,6 @@ class DocumentDAO(object):
         ):
             existing_document.summary = document.summary
 
-        if (
-            existing_document.vectors != document.vectors
-            and document.vectors is not None
-        ):
-            existing_document.vectors = document.vectors
-
         await self.session.commit()
         await self.session.refresh(existing_document)
         return existing_document
-
-
-class EmbeddingsDAO(object):
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def get_embeddings(self, vectors: list[str]) -> Sequence[Embedding]:
-        records = await self.session.execute(
-            select(Embedding).where(Embedding.uuid.in_(vectors))
-        )
-        embeddings = records.scalars().all()
-        LOG.debug(len(embeddings))
-
-        return embeddings

@@ -28,7 +28,7 @@ from oairag.models import (
     DocumentWithMetadata,
 )
 from oairag.prepdocs import process_document, summarize
-from oairag.database import DocumentDAO, get_db_session, EmbeddingsDAO
+from oairag.database import DocumentDAO, get_db_session
 
 LOG = logging.getLogger(__name__)
 
@@ -115,7 +115,9 @@ async def doc_upload(
                 await f.write(contents)
 
         document = await __add_document_entry(document_dao, file.filename, collection)
-        background_tasks.add_task(process_document, document_dao, file_path, collection)
+        background_tasks.add_task(
+            process_document, document_dao, file_path, document.id, collection
+        )
         return document
     except HTTPException as e:
         response.status_code = e.status_code
@@ -185,10 +187,9 @@ async def get_document_summary(
                 status_code=404, detail=f"DocumentResponse: {document_id} not found"
             )
         else:
-            embeddings_dao = EmbeddingsDAO(session)
             document = DocumentWithMetadata.model_validate(ext_record)
             if regenerate or document.summary is None:
-                document = await summarize(embeddings_dao, document)
+                document = await summarize(document)
                 background_tasks.add_task(document_dao.update_document, document)
                 return document.summary
             else:

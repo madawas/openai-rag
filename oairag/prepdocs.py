@@ -22,7 +22,7 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
 
 from .config import settings
 from . import database
-from .database import DocumentDAO, EmbeddingsDAO
+from .database import DocumentDAO
 from .exceptions import UnsupportedFileFormatException
 from .models import ProcStatus, DocumentWithMetadata
 
@@ -111,16 +111,16 @@ def __load_and_split_content(file_path: str, file_format: str) -> list[Document]
 
 
 async def __generate_vectors_and_store(
-    chunks: list[Document], collection: str
+    chunks: list[Document], collection: str, document_id: str
 ) -> list[str]:
     vector_store = database.get_vector_store(__EMBEDDINGS, collection)
     if settings.openai_api_type == "azure" or settings.openai_api_type == "azure_ad":
         for chunk in chunks:
             # Async Add documents is not yet implemented for PGVector
-            # todo: pass document id as the custom id and remove vector list
-            return vector_store.add_documents([chunk])
+            return vector_store.add_documents(documents=[chunk], ids=[document_id])
     else:
-        return vector_store.add_documents(chunks)
+        ids = [document_id for _ in range(len(chunks))]
+        return vector_store.add_documents(documents=chunks, ids=ids)
 
 
 async def __run_summarize_chain(
@@ -146,13 +146,16 @@ def get_llm_model(**kwargs):
     return OpenAI(openai_api_key=settings.openai_api_key, **kwargs)
 
 
-async def process_document(document_dao: DocumentDAO, file_path: str, collection: str):
+async def process_document(
+    document_dao: DocumentDAO, file_path: str, document_id: str, collection: str
+):
     """
     Processes an uploaded document. Runs the flow to chunk the file content and embed the text
     chunks and store it in a vector collection with other metadata
 
     :param document_dao: (DocumentDAO): Document data access object
     :param file_path: (str): Absolute path of the uploaded document to process
+    :param document_id: (str): ID of the document
     :param collection: (str): Collection which the document to be added
     """
     LOG.debug("Processing document: %s", file_path)
@@ -160,7 +163,7 @@ async def process_document(document_dao: DocumentDAO, file_path: str, collection
         file_format = __get_file_format(file_path)
         chunks = __load_and_split_content(file_path, file_format)
         LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
-        vectors = await __generate_vectors_and_store(chunks, collection)
+        vectors = await __generate_vectors_and_store(chunks, collection, document_id)
         await document_dao.update_document(
             DocumentWithMetadata(
                 file_name=os.path.basename(file_path),
@@ -179,13 +182,6 @@ async def process_document(document_dao: DocumentDAO, file_path: str, collection
     LOG.debug("%s processing complete", file_path)
 
 
-async def summarize(
-    embeddings_dao: EmbeddingsDAO, document: DocumentWithMetadata
-) -> DocumentWithMetadata:
-    embeddings = await embeddings_dao.get_embeddings(document.vectors)
+async def summarize(document: DocumentWithMetadata) -> DocumentWithMetadata:
     # todo: finish the summary
-
-    for e in embeddings:
-        LOG.debug(e.cmetadata)
-
     return document
