@@ -4,7 +4,7 @@ create table document (
     process_status varchar(20) not null,
     process_description varchar(150),
     collection_name varchar(100),
-    summary varchar(1000),
+    summary varchar,
     constraint documents_pkey primary key (id)
 );
 create table langchain_pg_collection (
@@ -18,7 +18,7 @@ create table langchain_pg_embedding (
     embedding public.vector null,
     document varchar null,
     cmetadata json null,
-    custom_id varchar null,
+    custom_id uuid null,
     uuid uuid not null,
     constraint langchain_pg_embedding_pkey primary key (uuid),
     constraint langchain_pg_embedding_collection_id_fkey foreign key (collection_id)

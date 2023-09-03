@@ -34,6 +34,17 @@ class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EmbeddingDTO(BaseModel):
+    uuid: UUID4
+    collection_id: UUID4
+    embedding: list[float]
+    document: str
+    cmetadata: dict
+    custom_id: UUID4
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentWithMetadata(BaseModel):
     id: UUID4 = None
     file_name: str
@@ -41,7 +52,7 @@ class DocumentWithMetadata(BaseModel):
     process_description: str | None = None
     collection_name: str | None = None
     summary: str | None = None
-    embeddings: list[str] | None = None
+    embeddings: list[EmbeddingDTO] = []
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -21,7 +21,9 @@ _engine = create_async_engine(
     echo=True,
 )
 
-_pg_session = async_sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+_pg_session = async_sessionmaker(
+    autocommit=False, autoflush=False, expire_on_commit=False, bind=_engine
+)
 
 
 async def get_db_session():
@@ -48,11 +50,13 @@ def get_vector_store(
 
 
 class Base(DeclarativeBase):
-    type_annotation_map = {list[str]: ARRAY(String), dict: JSON, list[float]: Vector}
+    type_annotation_map = {dict: JSON, list[float]: Vector}
 
 
 class DocumentRecord(Base):
     __tablename__ = "document"
+
+    __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[UUID4] = mapped_column(
         primary_key=True, index=True, server_default="uuid_generate_v4()"
@@ -63,7 +67,7 @@ class DocumentRecord(Base):
     collection_name: Mapped[str]
     summary: Mapped[Optional[str]]
     embeddings: Mapped[List["Embedding"]] = relationship(
-        back_populates="mapped_doc", passive_deletes=True
+        back_populates="mapped_doc", passive_deletes=True, lazy="selectin"
     )
 
 
@@ -83,10 +87,10 @@ class Embedding(Base):
     collection_id: Mapped[UUID4] = mapped_column(
         ForeignKey("langchain_pg_collection.uuid")
     )
-    embedding = mapped_column(Vector(1536))
+    embedding: Mapped[list[float]] = mapped_column(Vector(1536))
     document: Mapped[str]
-    custom_id: Mapped[UUID4] = mapped_column(ForeignKey("document.id"))
     cmetadata: Mapped[dict]
+    custom_id: Mapped[UUID4] = mapped_column(ForeignKey("document.id"))
     collection: Mapped["Collection"] = relationship(back_populates="embeddings")
     mapped_doc: Mapped["DocumentRecord"] = relationship(back_populates="embeddings")
 

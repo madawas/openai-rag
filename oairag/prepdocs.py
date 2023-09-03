@@ -183,5 +183,10 @@ async def process_document(
 
 
 async def summarize(document: DocumentWithMetadata) -> DocumentWithMetadata:
-    # todo: finish the summary
+    doc_list = [
+        Document(page_content=e.document, metadata=e.cmetadata)
+        for e in document.embeddings
+    ]
+    summary = await __run_summarize_chain(doc_list)
+    document.summary = summary
     return document
