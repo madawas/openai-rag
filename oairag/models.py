@@ -63,6 +63,11 @@ class SummaryResponse(BaseModel):
     summary: str
 
 
+class SummaryRequest(BaseModel):
+    regenerate: bool = False
+    synchronous: bool = False
+
+
 class Links(BaseModel):
     current_page: HttpUrl
     first_page: HttpUrl

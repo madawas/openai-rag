@@ -24,10 +24,11 @@ from oairag.models import (
     DocumentListResponse,
     Links,
     Meta,
+    SummaryRequest,
     SummaryResponse,
     DocumentWithMetadata,
 )
-from oairag.prepdocs import process_document, summarize
+from oairag.prepdocs import process_document, summarise
 from oairag.database import DocumentDAO, get_db_session
 
 LOG = logging.getLogger(__name__)
@@ -71,7 +72,6 @@ async def doc_upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection: Optional[str] = Form(...),
-    generate_summary: bool = Form(default=False),
     session: AsyncSession = db_session,
 ):
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
@@ -91,12 +91,7 @@ async def doc_upload(
 
         document = await __add_document_entry(document_dao, file.filename, collection)
         background_tasks.add_task(
-            process_document,
-            document_dao,
-            file_path,
-            document.id,
-            collection,
-            generate_summary,
+            process_document, document_dao, file_path, document.id, collection
         )
         return document
     except HTTPException as e:
@@ -198,9 +193,10 @@ async def delete_document(
         )
 
 
-@router.get(
+@router.post(
     path="/{document_id}/summary",
-    summary="Get document summary",
+    summary="Generate document summary",
+    status_code=status.HTTP_202_ACCEPTED,
     responses={
         200: {"model": SummaryResponse, "description": "Success"},
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
@@ -211,7 +207,7 @@ async def get_document_summary(
     response: Response,
     background_tasks: BackgroundTasks,
     document_id: str,
-    regenerate: bool = False,
+    summary_request: SummaryRequest,
     session: AsyncSession = db_session,
 ):
     try:
@@ -223,12 +219,66 @@ async def get_document_summary(
             )
         else:
             document = DocumentWithMetadata.model_validate(ext_record)
-            if regenerate or document.summary is None:
-                document = await summarize(document)
-                background_tasks.add_task(document_dao.update_document, document)
-                return document.summary
+
+            if not (document.summary is None and summary_request.regenerate):
+                return SummaryResponse(
+                    document_id=document.id,
+                    file_name=document.file_name,
+                    summary=document.summary,
+                )
             else:
-                return document.summary
+                if summary_request.synchronous:
+                    # todo: add additional parameters to generate the summary
+                    document = await summarise(document)
+                    background_tasks.add_task(document_dao.update_document, document)
+                    return SummaryResponse(
+                        document_id=document.id,
+                        file_name=document.file_name,
+                        summary=document.summary,
+                    )
+                else:
+                    background_tasks.add_task(summarise, document, True, document_dao)
+                    return Response(status_code=status.HTTP_202_ACCEPTED)
+    except HTTPException as e:
+        response.status_code = e.status_code
+        return ErrorResponse(message=e.detail)
+    except Exception as e:
+        response.status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        return ErrorResponse(
+            message=f"Error occurred while retrieving the summary of the document with id:"
+            f" {document_id}",
+            exception=repr(e),
+        )
+
+
+@router.get(
+    path="/{document_id}/summary",
+    summary="Get document summary",
+    responses={
+        200: {"model": SummaryResponse, "description": "Success"},
+        500: {"model": ErrorResponse, "description": "Internal Server Error"},
+        404: {"model": ErrorResponse, "description": "Not Found"},
+    },
+)
+async def get_document_summary(
+    response: Response,
+    document_id: str,
+    session: AsyncSession = db_session,
+):
+    try:
+        document_dao = DocumentDAO(session)
+        ext_record = await document_dao.get_document_by_id(document_id)
+        if ext_record is None:
+            raise HTTPException(
+                status_code=404, detail=f"DocumentResponse: {document_id} not found"
+            )
+        else:
+            document = DocumentWithMetadata.model_validate(ext_record)
+            return SummaryResponse(
+                document_id=document.id,
+                file_name=document.file_name,
+                summary=document.summary,
+            )
     except HTTPException as e:
         response.status_code = e.status_code
         return ErrorResponse(message=e.detail)
