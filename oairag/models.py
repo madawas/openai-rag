@@ -78,5 +78,5 @@ class Meta(BaseModel):
 
 class DocumentListResponse(BaseModel):
     documents: list[DocumentResponse]
-    links: Links
-    meta: Meta
+    links: Links | None
+    meta: Meta | None

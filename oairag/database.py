@@ -1,12 +1,12 @@
 import logging
 from typing import Sequence, Optional, List
 
+from langchain.vectorstores import PGVector
 from pgvector.sqlalchemy import Vector
 from pydantic import UUID4
-from sqlalchemy import select, func, String, ForeignKey
-from sqlalchemy.dialects.postgresql import ARRAY, JSON
+from sqlalchemy import select, func, delete, ForeignKey
+from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from langchain.vectorstores import PGVector
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from oairag.config import settings
@@ -154,10 +154,7 @@ class DocumentDAO(object):
         ):
             existing_document.process_status = document.process_status
 
-        if (
-            existing_document.process_description != document.process_description
-            and document.process_description is not None
-        ):
+        if existing_document.process_description != document.process_description:
             existing_document.process_description = document.process_description
 
         if (
@@ -169,3 +166,11 @@ class DocumentDAO(object):
         await self.session.commit()
         await self.session.refresh(existing_document)
         return existing_document
+
+    async def delete_document(self, document_id):
+        LOG.debug("Deleting document with id: %s", document_id)
+        await self.session.execute(
+            delete(DocumentRecord).where(DocumentRecord.id == document_id)
+        )
+        await self.session.flush()
+        await self.session.commit()

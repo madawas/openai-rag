@@ -143,11 +143,19 @@ def get_embeddings_function():
 
 
 def get_llm_model(**kwargs):
-    return OpenAI(openai_api_key=settings.openai_api_key, **kwargs)
+    return OpenAI(
+        openai_api_key=settings.openai_api_key,
+        model_name=settings.openai_default_llm_model,
+        **kwargs,
+    )
 
 
 async def process_document(
-    document_dao: DocumentDAO, file_path: str, document_id: str, collection: str
+    document_dao: DocumentDAO,
+    file_path: str,
+    document_id: str,
+    collection: str,
+    generate_summary: bool = False,
 ):
     """
     Processes an uploaded document. Runs the flow to chunk the file content and embed the text
@@ -157,6 +165,7 @@ async def process_document(
     :param file_path: (str): Absolute path of the uploaded document to process
     :param document_id: (str): ID of the document
     :param collection: (str): Collection which the document to be added
+    :param generate_summary: (bool): Whether to summarize the document
     """
     LOG.debug("Processing document: %s", file_path)
     try:
@@ -164,13 +173,29 @@ async def process_document(
         chunks = __load_and_split_content(file_path, file_format)
         LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
         vectors = await __generate_vectors_and_store(chunks, collection, document_id)
-        await document_dao.update_document(
+
+        if generate_summary:
+            process_status = ProcStatus.PENDING
+            process_description = "Summarizing in progress"
+        else:
+            process_status = ProcStatus.COMPLETE
+            process_description = None
+
+        processed_doc = await document_dao.update_document(
             DocumentWithMetadata(
                 file_name=os.path.basename(file_path),
-                process_status=ProcStatus.COMPLETE,
+                process_status=process_status,
+                prpcess_description=process_description,
                 vectors=vectors,
             )
         )
+        if generate_summary:
+            processed_doc = await summarize(
+                DocumentWithMetadata.model_validate(processed_doc)
+            )
+            processed_doc.process_status = ProcStatus.COMPLETE
+            processed_doc.process_description = None
+            await document_dao.update_document(processed_doc)
     except Exception as e:
         await document_dao.update_document(
             DocumentWithMetadata(
