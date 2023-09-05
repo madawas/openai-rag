@@ -6,7 +6,9 @@ It also provides utility functions to determine file formats and split content b
 """
 import logging
 import os
+import httpx
 from typing import Optional
+from fastapi.encoders import jsonable_encoder
 
 from langchain import OpenAI
 from langchain.chains.summarize import load_summarize_chain
@@ -19,12 +21,13 @@ from langchain.document_loaders import (
 from langchain.embeddings import OpenAIEmbeddings
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
+from pydantic import HttpUrl
 
 from .config import settings
 from . import database
 from .database import DocumentDAO
 from .exceptions import UnsupportedFileFormatException
-from .models import ProcStatus, DocumentWithMetadata
+from .models import ProcStatus, DocumentWithMetadata, DocumentResponse
 
 LOG = logging.getLogger(__name__)
 __EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
@@ -138,6 +141,14 @@ async def __run_summarise_chain(
     return await chain.arun(docs)
 
 
+async def __send_callback(url: HttpUrl, payload):
+    client = httpx.AsyncClient()
+    req = client.build_request(method="POST", url=url, json=jsonable_encoder(payload))
+    response = await client.send(req)
+    LOG.debug("Response received for callback- [URL: %s, Response: %s]", url, response)
+    await client.aclose()
+
+
 def get_embeddings_function():
     return __EMBEDDINGS
 
@@ -151,7 +162,11 @@ def get_llm_model(**kwargs):
 
 
 async def process_document(
-    document_dao: DocumentDAO, file_path: str, document_id: str, collection: str
+    document_dao: DocumentDAO,
+    file_path: str,
+    document_id: str,
+    collection: str,
+    callback_url: HttpUrl | None = None,
 ):
     """
     Processes an uploaded document. Runs the flow to chunk the file content and embed the text
@@ -161,6 +176,7 @@ async def process_document(
     :param file_path: (str): Absolute path of the uploaded document to process
     :param document_id: (str): ID of the document
     :param collection: (str): Collection which the document to be added
+    :param callback_url: (str)
     """
     LOG.debug("Processing document: %s", file_path)
     try:
@@ -169,12 +185,19 @@ async def process_document(
         LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
         await __generate_vectors_and_store(chunks, collection, document_id)
 
-        await document_dao.update_document(
+        updated_doc = await document_dao.update_document(
             DocumentWithMetadata(
                 file_name=os.path.basename(file_path),
                 process_status=ProcStatus.COMPLETE,
             )
         )
+
+        if callback_url is not None:
+            await __send_callback(
+                callback_url,
+                DocumentResponse.model_validate(updated_doc),
+            )
+
     except Exception as e:
         await document_dao.update_document(
             DocumentWithMetadata(

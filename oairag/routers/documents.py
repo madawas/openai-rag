@@ -1,9 +1,9 @@
 import logging
 import math
 import os
-import aiofiles
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
+import aiofiles
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -16,8 +16,11 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.exceptions import HTTPException
+from pydantic import HttpUrl
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from oairag.config import settings
+from oairag.database import DocumentDAO, get_db_session
 from oairag.models import (
     ErrorResponse,
     DocumentResponse,
@@ -29,30 +32,29 @@ from oairag.models import (
     DocumentWithMetadata,
 )
 from oairag.prepdocs import process_document, summarise
-from oairag.database import DocumentDAO, get_db_session
 
 LOG = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+__document_callbacks_router = APIRouter()
 
 db_session = Depends(get_db_session)
 
 
-"""
-    Uploads a text document to be processed. Uploaded document will be stored in a document store
-    and processed to extract text and store in a vector store as embeddings.
+@__document_callbacks_router.post(
+    path="{$callback_url}",
+    response_model=DocumentResponse,
+)
+def document_processed_notification():
+    pass
 
-    :param response: (Response): The FastAPI Response object to modify in case of errors.
-    :param background_tasks: (BackgroundTasks): Asynchronous processing tasks to run on
-    uploaded docs.
-    :param  file: (UploadFile): The UploadFile object representing the uploaded file.
-    :param collection: Optional[str]: Collection which the document is added to
-    :param summarize: (bool): Whether to summarize the document.
-    :param session: Database session
 
-    :returns Union[DocumentResponse, ErrorResponse]: Returns an ErrorResponse object if an error
-    occurs, otherwise returns a DocumentResponse.
-    """
+@__document_callbacks_router.post(
+    path="{$callback_url}",
+    response_model=SummaryResponse,
+)
+def document_summary_notification():
+    pass
 
 
 @router.post(
@@ -61,6 +63,7 @@ db_session = Depends(get_db_session)
     description="Upload a document to extract the text, chunk it and embed the chunks and store "
     "in a vector store",
     status_code=status.HTTP_201_CREATED,
+    callbacks=__document_callbacks_router.routes,
     responses={
         201: {"model": DocumentResponse, "description": "Success"},
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
@@ -72,8 +75,24 @@ async def doc_upload(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     collection: Optional[str] = Form(...),
+    callback_url: Optional[HttpUrl] = None,
     session: AsyncSession = db_session,
 ):
+    """
+    Uploads a text document to be processed. Uploaded document will be stored in a document store
+    and processed to extract text and store in a vector store as embeddings.
+
+    :param response: (Response): The FastAPI Response object to modify in case of errors.
+    :param background_tasks: (BackgroundTasks): Asynchronous processing tasks to run on
+    uploaded docs.
+    :param  file: (UploadFile): The UploadFile object representing the uploaded file.
+    :param collection: Optional[str]: Collection which the document is added to
+    :param callback_url: Optional[HttpUrl]: Callback URL to notify the status of the document
+    :param session: Database session
+
+    :returns Union[DocumentResponse, ErrorResponse]: Returns an ErrorResponse object if an error
+    occurs, otherwise returns a DocumentResponse.
+    """
     file_path = os.path.join(settings.doc_upload_dir, file.filename)
 
     try:
