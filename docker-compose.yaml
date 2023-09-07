@@ -4,7 +4,7 @@ services:
   db:
     image: ankane/pgvector:latest
     ports:
-      - 5432:5432
+      - "5432:5432"
     env_file:
       - ./.env
     volumes:
@@ -16,7 +16,7 @@ services:
     depends_on:
       - db
     ports:
-      - 8000:8000
+      - "8000:8000"
     volumes:
       - ./docs:/home/uploads
       - ./oairag:/home/oairag
