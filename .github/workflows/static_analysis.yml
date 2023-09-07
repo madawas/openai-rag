@@ -3,7 +3,7 @@ name: Check code style
 on: [push, pull_request]
 
 jobs:
-  build:
+  analyse:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -28,3 +28,7 @@ jobs:
     - name: Analysing the code with pylint
       run: |
         pylint --fail-under=5 $(git ls-files '*.py')
+    - name: 'Qodana Scan'
+      uses: JetBrains/qodana-action@v2023.2
+      env:
+        QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
