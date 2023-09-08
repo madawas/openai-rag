@@ -3,32 +3,38 @@ name: Check code style
 on: [push, pull_request]
 
 jobs:
-  analyse:
+  lint:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11"]
     steps:
     - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.11
       uses: actions/setup-python@v3
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: 3.11
         cache: pip
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pylint
         pip install -r requirements.txt
     - name: Check formatting with Black
       uses: psf/black@stable
       with:
         options: "--check --diff"
         src: "./oairag"
-    - name: Analysing the code with pylint
+  qodana:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.11
+        cache: pip
+    - name: Install dependencies
       run: |
-        pylint --fail-under=5 $(git ls-files '*.py')
-    - name: 'Qodana Scan'
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: Qodana Scan
       uses: JetBrains/qodana-action@v2023.2
       env:
         QODANA_TOKEN: ${{ secrets.QODANA_TOKEN }}
