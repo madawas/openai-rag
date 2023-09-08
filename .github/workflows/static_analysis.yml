@@ -1,4 +1,4 @@
-name: Check code style
+name: Analyse static code
 
 on: [push, pull_request]
 
