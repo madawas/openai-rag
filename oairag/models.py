@@ -63,6 +63,15 @@ class SummaryResponse(BaseModel):
     summary: str
 
 
+class CollectionModel(BaseModel):
+    uuid: UUID4 = None
+    name: str
+    cmetadata: dict | None
+    documents: list[str] | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class SummaryRequest(BaseModel):
     regenerate: bool = False
     synchronous: bool = False
@@ -85,3 +94,9 @@ class DocumentListResponse(BaseModel):
     documents: list[DocumentResponse]
     links: Links | None
     meta: Meta | None
+
+
+class CollectionListModel(BaseModel):
+    collections: list[CollectionModel]
+    links: Links
+    meta: Meta

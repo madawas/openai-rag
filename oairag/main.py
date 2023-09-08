@@ -1,6 +1,8 @@
 import logging
+
 from fastapi import FastAPI
-from .routers import documents
+
+from .routers import documents, collections
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -9,3 +11,4 @@ app = FastAPI(
 )
 
 app.include_router(documents.router)
+app.include_router(collections.router)

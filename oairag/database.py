@@ -1,18 +1,19 @@
 import logging
-from typing import Sequence, Optional, List
+from typing import Sequence, Optional, List, Any
 
-from langchain.vectorstores import PGVector
 from pgvector.sqlalchemy import Vector
 from pydantic import UUID4
-from sqlalchemy import select, func, delete, ForeignKey
+from sqlalchemy import select, func, delete, ForeignKey, Row, RowMapping
 from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from oairag.config import settings
-from oairag.models import DocumentResponse, DocumentWithMetadata
+from .config import get_settings
+from .models import DocumentResponse, DocumentWithMetadata, CollectionModel
 
 LOG = logging.getLogger(__name__)
+
+settings = get_settings()
 
 _engine = create_async_engine(
     f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"
@@ -37,29 +38,6 @@ async def get_db_session() -> AsyncSession:
         yield db_session
     finally:
         await db_session.close()
-
-
-def get_vector_store(
-    embedding_function, collection_name=settings.default_collection
-) -> PGVector:
-    """
-    Get a PGVector store.
-
-    :param embedding_function: The embedding function.
-    :param collection_name: The name of the collection. Defaults to settings.default_collection.
-
-    :return: PGVector: A PGVector store.
-    """
-    vector_store = PGVector(
-        connection_string=f"postgresql+psycopg2://{settings.postgres_user}:"
-        f"{settings.postgres_password}@{settings.postgres_host}"
-        f"/{settings.postgres_db}",
-        collection_name=collection_name,
-        embedding_function=embedding_function,
-    )
-    vector_store.create_tables_if_not_exists()
-
-    return vector_store
 
 
 class Base(DeclarativeBase):
@@ -92,7 +70,7 @@ class DocumentRecord(Base):
     )
 
 
-class Collection(Base):
+class CollectionRecord(Base):
     """
     Represents a collection in the database.
     """
@@ -120,7 +98,7 @@ class Embedding(Base):
     document: Mapped[str]
     cmetadata: Mapped[dict]
     custom_id: Mapped[UUID4] = mapped_column(ForeignKey("document.id"))
-    collection: Mapped["Collection"] = relationship(back_populates="embeddings")
+    collection: Mapped["CollectionRecord"] = relationship(back_populates="embeddings")
     mapped_doc: Mapped["DocumentRecord"] = relationship(back_populates="embeddings")
 
 
@@ -258,3 +236,89 @@ class DocumentDAO(object):
         )
         await self.session.flush()
         await self.session.commit()
+
+
+class CollectionDAO(object):
+    """
+    Data Access Object (DAO) for managing collections
+    """
+
+    def __init__(self, session: AsyncSession):
+        """
+        Initialize the CollectionDAO.
+
+        :param session: An asynchronous database session.
+        """
+        self.session = session
+
+    async def create_collection(self, collection: CollectionModel) -> CollectionRecord:
+        """
+        Create a new collection in the database.
+
+        :param collection: The collection to create.
+
+        :return: CollectionRecord: The created collection record.
+        """
+        collection = CollectionRecord(
+            name=collection.name, cmetadata=collection.cmetadata
+        )
+
+        self.session.add(collection)
+        await self.session.commit()
+        await self.session.refresh(collection)
+
+        return collection
+
+    async def get_collection_by_id(
+        self, collection_id: str, with_documents: bool = False
+    ) -> tuple[CollectionRecord | None, Sequence[Row | RowMapping | Any] | None]:
+        """
+        Get a collection by its ID and optionally retrieve associated documents.
+
+        :param collection_id: The ID of the collection to retrieve.
+        :param with_documents: Whether to include associated documents.
+
+        :return: tuple[CollectionRecord | None, Sequence[Row | RowMapping | Any] | None]:
+            A tuple containing the collection record (or None if not found)
+            and a list of associated documents (or None if with_documents is False).
+        """
+        documents = None
+        rows = await self.session.execute(
+            select(CollectionRecord).where(CollectionRecord.uuid == collection_id)
+        )
+        collection = rows.scalars().one_or_none()
+        if collection and with_documents:
+            rows = await self.session.execute(
+                select(DocumentRecord.file_name).where(
+                    DocumentRecord.collection_name == collection.name
+                )
+            )
+            documents = rows.scalars().all()
+
+        return collection, documents
+
+    async def get_collection_count(self) -> int:
+        """
+        Get the total count of collections in the database.
+
+        :return: int: The collection count.
+        """
+        result = await self.session.execute(func.count(CollectionRecord.uuid))
+        return result.scalar()
+
+    async def get_collection_list(
+        self, page: int = 0, size: int = 20
+    ) -> Sequence[CollectionRecord]:
+        """
+        Get a list of collections with optional pagination.
+
+        :param page: The page number. Defaults to 0.
+        :param size: The number of collections per page. Defaults to 20.
+
+        :return: Sequence[CollectionRecord]: A list of collection records.
+        """
+        records = await self.session.execute(
+            select(CollectionRecord).offset(page * size).limit(size)
+        )
+
+        return records.scalars().all()
