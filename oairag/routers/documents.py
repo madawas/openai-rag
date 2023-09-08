@@ -19,9 +19,9 @@ from fastapi.exceptions import HTTPException
 from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from oairag.config import settings
-from oairag.database import DocumentDAO, get_db_session
-from oairag.models import (
+from ..config import get_settings, Settings
+from ..database import DocumentDAO, get_db_session
+from ..models import (
     ErrorResponse,
     DocumentResponse,
     DocumentListResponse,
@@ -31,14 +31,15 @@ from oairag.models import (
     SummaryResponse,
     DocumentWithMetadata,
 )
-from oairag.prepdocs import process_document, summarise
+from ..prepdocs import process_document, summarise
 
 LOG = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(prefix="/document", tags=["document"])
 __document_callbacks_router = APIRouter()
 
 db_session = Depends(get_db_session)
+app_settings = Depends(get_settings)
 
 
 @__document_callbacks_router.post(
@@ -46,14 +47,6 @@ db_session = Depends(get_db_session)
     response_model=DocumentResponse,
 )
 def document_processed_notification():
-    pass
-
-
-@__document_callbacks_router.post(
-    path="{$callback_url}",
-    response_model=SummaryResponse,
-)
-def document_summary_notification():
     pass
 
 
@@ -76,6 +69,7 @@ async def doc_upload(
     file: UploadFile = File(...),
     collection: Optional[str] = Form(...),
     callback_url: Optional[HttpUrl] = None,
+    settings: Settings = app_settings,
     session: AsyncSession = db_session,
 ):
     """
@@ -88,6 +82,7 @@ async def doc_upload(
     :param file: (UploadFile): The UploadFile object representing the uploaded file.
     :param collection: Optional[str]: Collection which the document is added to
     :param callback_url: Optional[HttpUrl]: Callback URL to notify the status of the document
+    :param settings: Application settings
     :param session: Database session
 
     :returns Union[DocumentResponse, ErrorResponse]: Returns an ErrorResponse object if an error
@@ -131,7 +126,7 @@ async def doc_upload(
 
 
 @router.get(
-    path="",
+    path="/list",
     summary="Get list of documents",
     responses={
         200: {"model": DocumentListResponse, "description": "Success"},
@@ -176,7 +171,7 @@ async def get_document(
         document = await document_dao.get_document_by_id(document_id)
         if document is None:
             raise HTTPException(
-                status_code=404, detail=f"DocumentResponse: {document_id} not found"
+                status_code=404, detail=f"Document: {document_id} not found"
             )
         return document
     except HTTPException as e:
@@ -192,7 +187,7 @@ async def get_document(
 
 @router.delete(
     path="/{document_id}",
-    summary="Get document details by document id",
+    summary="Delete document",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
         500: {"model": ErrorResponse, "description": "Internal Server Error"},
@@ -242,7 +237,12 @@ async def get_document_summary(
             )
         document = DocumentWithMetadata.model_validate(ext_record)
 
-        if not (document.summary is None and summary_request.regenerate):
+        if not (document.summary is None or summary_request.regenerate):
+            LOG.warning(
+                "Document summary for document: [%s] already exists and regenerate is set to "
+                "false. Hence responding with the existing summary",
+                document_id,
+            )
             return SummaryResponse(
                 document_id=document.id,
                 file_name=document.file_name,
@@ -276,7 +276,7 @@ async def get_document_summary(
 async def __add_document_entry(
     document_dao: DocumentDAO,
     filename: str,
-    collection: str = settings.default_collection,
+    collection: str,
 ) -> DocumentResponse:
     result = await document_dao.add_document(
         DocumentResponse(file_name=filename, collection_name=collection),
@@ -288,35 +288,36 @@ async def __get_document_list(
     document_dao: DocumentDAO, request: Request, page: int = 1, size: int = 20
 ) -> DocumentListResponse:
     total_records = await document_dao.get_document_count()
-    if total_records > 0:
-        total_pages = math.ceil(total_records / size)
-        documents = await document_dao.get_documents(page - 1, size)
 
-        if page > total_pages:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Incorrect page value. Page value {page} cannot be greater than "
-                f"{total_pages}",
-            )
-
-        prev_page = (
-            None if page <= 1 else f"{request.base_url}?page={page-1}&size={size}"
-        )
-        next_page = (
-            None
-            if page >= total_pages
-            else f"{request.base_url}?page={page+1}&size={size}"
-        )
-
-        links = Links(
-            current_page=f"{request.base_url}documents?page={page}&size={size}",
-            first_page=f"{request.base_url}?page=1&size={size}",
-            prev_page=prev_page,
-            next_page=next_page,
-            last_page=f"{request.base_url}?page={total_pages}&size={size}",
-        )
-        meta = Meta(total_records=total_records, total_pages=total_pages)
-
-        return DocumentListResponse(documents=documents, links=links, meta=meta)
-    else:
+    if total_records <= 0:
         return DocumentListResponse(documents=[], links=None, meta=None)
+
+    total_pages = math.ceil(total_records / size)
+    documents = await document_dao.get_documents(page - 1, size)
+
+    if page > total_pages:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Incorrect page value. Page value {page} cannot be greater than "
+            f"{total_pages}",
+        )
+
+    prev_page = (
+        None if page <= 1 else f"{request.base_url}document?page={page-1}&size={size}"
+    )
+    next_page = (
+        None
+        if page >= total_pages
+        else f"{request.base_url}document?page={page+1}&size={size}"
+    )
+
+    links = Links(
+        current_page=f"{request.base_url}document?page={page}&size={size}",
+        first_page=f"{request.base_url}document?page=1&size={size}",
+        prev_page=prev_page,
+        next_page=next_page,
+        last_page=f"{request.base_url}document?page={total_pages}&size={size}",
+    )
+    meta = Meta(total_records=total_records, total_pages=total_pages)
+
+    return DocumentListResponse(documents=documents, links=links, meta=meta)
