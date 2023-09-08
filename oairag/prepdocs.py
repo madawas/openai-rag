@@ -2,35 +2,34 @@
 This module defines functions for processing uploaded documents, including loading and chunking
 content, as well as embedding text chunks and storing them in a vector collection.
 
-It also provides utility functions to determine file formats and split content based on file formats.
+It also provides utility functions to determine file formats and split content based on file
+formats.
 """
 import logging
 import os
-import httpx
 from typing import Optional
-from fastapi.encoders import jsonable_encoder
 
-from langchain import OpenAI
-from langchain.chains.summarize import load_summarize_chain
 from langchain.document_loaders import (
     PyPDFLoader,
     TextLoader,
     UnstructuredHTMLLoader,
     UnstructuredMarkdownLoader,
 )
-from langchain.embeddings import OpenAIEmbeddings
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
 from pydantic import HttpUrl
 
-from .config import settings
-from . import database
+from .config import get_settings
+from .conversation import __run_summarise_chain
 from .database import DocumentDAO
 from .exceptions import UnsupportedFileFormatException
 from .models import ProcStatus, DocumentWithMetadata, DocumentResponse
+from .util import send_callback
+from .vectorstore import generate_vectors_and_store
 
 LOG = logging.getLogger(__name__)
-__EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
+
+settings = get_settings()
 __FILE_FORMAT_DICT = {
     "md": "markdown",
     "txt": "text",
@@ -113,54 +112,6 @@ def __load_and_split_content(file_path: str, file_format: str) -> list[Document]
     )
 
 
-async def __generate_vectors_and_store(
-    chunks: list[Document], collection: str, document_id: str
-):
-    vector_store = database.get_vector_store(__EMBEDDINGS, collection)
-    if settings.openai_api_type == "azure" or settings.openai_api_type == "azure_ad":
-        for chunk in chunks:
-            # Async Add documents is not yet implemented for PGVector
-            vector_store.add_documents(documents=[chunk], ids=[document_id])
-    else:
-        ids = [document_id for _ in range(len(chunks))]
-        vector_store.add_documents(documents=chunks, ids=ids)
-
-
-async def __run_summarise_chain(
-    docs: list[Document], llm: OpenAI = None, **kwargs
-) -> str:
-    if llm is None:
-        chain = load_summarize_chain(
-            llm=get_llm_model(), chain_type=kwargs.get("chain_type", "refine")
-        )
-    else:
-        chain = load_summarize_chain(
-            llm=llm, chain_type=kwargs.get("chain_type", "refine")
-        )
-
-    return await chain.arun(docs)
-
-
-async def __send_callback(url: HttpUrl, payload):
-    client = httpx.AsyncClient()
-    req = client.build_request(method="POST", url=url, json=jsonable_encoder(payload))
-    response = await client.send(req)
-    LOG.debug("Response received for callback- [URL: %s, Response: %s]", url, response)
-    await client.aclose()
-
-
-def get_embeddings_function():
-    return __EMBEDDINGS
-
-
-def get_llm_model(**kwargs):
-    return OpenAI(
-        openai_api_key=settings.openai_api_key,
-        model_name=settings.openai_default_llm_model,
-        **kwargs,
-    )
-
-
 async def process_document(
     document_dao: DocumentDAO,
     file_path: str,
@@ -175,7 +126,7 @@ async def process_document(
     :param document_dao: (DocumentDAO): Document data access object
     :param file_path: (str): Absolute path of the uploaded document to process
     :param document_id: (str): ID of the document
-    :param collection: (str): Collection which the document to be added
+    :param collection: (str): CollectionRecord which the document to be added
     :param callback_url: (str)
     """
     LOG.debug("Processing document: %s", file_path)
@@ -183,7 +134,7 @@ async def process_document(
         file_format = __get_file_format(file_path)
         chunks = __load_and_split_content(file_path, file_format)
         LOG.debug("File [%s] is split in to %d chunks", file_path, len(chunks))
-        await __generate_vectors_and_store(chunks, collection, document_id)
+        await generate_vectors_and_store(chunks, collection, document_id)
 
         updated_doc = await document_dao.update_document(
             DocumentWithMetadata(
@@ -193,7 +144,7 @@ async def process_document(
         )
 
         if callback_url is not None:
-            await __send_callback(
+            await send_callback(
                 callback_url,
                 DocumentResponse.model_validate(updated_doc),
             )

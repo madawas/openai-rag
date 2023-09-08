@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import Union, Optional
 from pydantic import DirectoryPath, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,7 +9,7 @@ class Settings(BaseSettings):
     Settings class to define configuration parameters.
 
     Attributes:
-        model_config (SettingsConfigDict): Configuration dictionary for model settings.
+        model_config (SettingsConfigDict): Configuration dictionary for model app_settings.
         doc_upload_dir (DirectoryPath): Directory path for document uploads.
 
     """
@@ -32,4 +33,6 @@ class Settings(BaseSettings):
     default_collection: str = Field(default="oairag_default_collection")
 
 
-settings = Settings()
+@lru_cache(maxsize=1)
+def get_settings():
+    return Settings()
