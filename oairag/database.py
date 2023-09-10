@@ -8,12 +8,12 @@ from sqlalchemy.dialects.postgresql import JSON
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from .config import get_settings
+from .config import Settings
 from .models import DocumentResponse, DocumentWithMetadata, CollectionModel
 
 LOG = logging.getLogger(__name__)
 
-settings = get_settings()
+settings = Settings.get_settings()
 
 _engine = create_async_engine(
     f"postgresql+asyncpg://{settings.postgres_user}:{settings.postgres_password}"

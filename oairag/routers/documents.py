@@ -19,7 +19,7 @@ from fastapi.exceptions import HTTPException
 from pydantic import HttpUrl
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..config import get_settings, Settings
+from ..config import Settings
 from ..database import DocumentDAO, get_db_session
 from ..models import (
     ErrorResponse,
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/document", tags=["document"])
 __document_callbacks_router = APIRouter()
 
 db_session = Depends(get_db_session)
-app_settings = Depends(get_settings)
+app_settings = Depends(Settings.get_settings)
 
 
 @__document_callbacks_router.post(

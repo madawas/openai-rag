@@ -19,7 +19,7 @@ from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter, Language
 from pydantic import HttpUrl
 
-from .config import get_settings
+from .config import Settings
 from .conversation import __run_summarise_chain
 from .database import DocumentDAO
 from .exceptions import UnsupportedFileFormatException
@@ -29,7 +29,7 @@ from .vectorstore import generate_vectors_and_store
 
 LOG = logging.getLogger(__name__)
 
-settings = get_settings()
+settings = Settings.get_settings()
 __FILE_FORMAT_DICT = {
     "md": "markdown",
     "txt": "text",

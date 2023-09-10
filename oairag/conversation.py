@@ -2,9 +2,9 @@ from langchain import OpenAI
 from langchain.chains.summarize import load_summarize_chain
 from langchain.schema import Document
 
-from .config import get_settings
+from .config import Settings
 
-settings = get_settings()
+settings = Settings.get_settings()
 
 
 async def __run_summarise_chain(

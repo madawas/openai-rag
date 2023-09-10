@@ -2,9 +2,9 @@ from langchain.embeddings import OpenAIEmbeddings
 from langchain.schema import Document
 from langchain.vectorstores import PGVector
 
-from .config import get_settings
+from .config import Settings
 
-settings = get_settings()
+settings = Settings.get_settings()
 
 __EMBEDDINGS = OpenAIEmbeddings(openai_api_key=settings.openai_api_key)
 
