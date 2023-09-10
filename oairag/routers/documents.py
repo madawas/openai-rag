@@ -173,7 +173,7 @@ async def get_document(
             raise HTTPException(
                 status_code=404, detail=f"Document: {document_id} not found"
             )
-        return document
+        return DocumentResponse.model_validate(document)
     except HTTPException as e:
         response.status_code = e.status_code
         return ErrorResponse(message=e.detail)
