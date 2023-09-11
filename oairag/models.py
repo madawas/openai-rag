@@ -271,7 +271,7 @@ class Citation(BaseModel):
     page_offset: int | None = None
 
 
-class QueryRequest(BaseModel):
+class ChatRequest(BaseModel):
     """
     Represents a request for a query on a collection of documents.
 
@@ -286,9 +286,11 @@ class QueryRequest(BaseModel):
     filter: Filter | None = None
     query: str
     llm: LLM | None = None
+    include_citations: bool = True
+    include_usage: bool = False
 
 
-class QueryResponse(BaseModel):
+class ChatResponse(BaseModel):
     """
     Represents the response to a query.
 

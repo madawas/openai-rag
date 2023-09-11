@@ -297,6 +297,34 @@ class CollectionDAO(object):
 
         return collection, documents
 
+    async def get_collection_by_name(
+        self, collection_name: str, with_documents: bool = False
+    ) -> tuple[CollectionRecord | None, Sequence[Row | RowMapping | Any] | None]:
+        """
+        Get a collection by its ID and optionally retrieve associated documents.
+
+        :param collection_name: Name of the collection to retrieve.
+        :param with_documents: Whether to include associated documents.
+
+        :return: tuple[CollectionRecord | None, Sequence[Row | RowMapping | Any] | None]:
+            A tuple containing the collection record (or None if not found)
+            and a list of associated documents (or None if with_documents is False).
+        """
+        documents = None
+        rows = await self.session.execute(
+            select(CollectionRecord).where(CollectionRecord.uuid == collection_name)
+        )
+        collection = rows.scalars().one_or_none()
+        if collection and with_documents:
+            rows = await self.session.execute(
+                select(DocumentRecord.file_name).where(
+                    DocumentRecord.collection_name == collection.name
+                )
+            )
+            documents = rows.scalars().all()
+
+        return collection, documents
+
     async def get_collection_count(self) -> int:
         """
         Get the total count of collections in the database.
