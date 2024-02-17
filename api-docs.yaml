@@ -1,0 +1,971 @@
+openapi: 3.1.0
+info:
+  title: OpenAI Retrieval Augmented Generation API
+  version: 0.0.1
+paths:
+  /document/upload:
+    post:
+      tags:
+        - document
+      summary: Upload a document to process
+      description: >-
+        Upload a document to extract the text, chunk it and embed the chunks and
+        store in a vector store
+      operationId: doc_upload_document_upload_post
+      parameters:
+        - name: callback_url
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                format: uri
+                minLength: 1
+                maxLength: 2083
+              - type: 'null'
+            title: Callback Url
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_doc_upload_document_upload_post'
+      callbacks:
+        document_processed_notification:
+          '{$callback_url}':
+            post:
+              summary: Document Processed Notification
+              operationId: document_processed_notification__callback_url__post
+              responses:
+                '200':
+                  description: Successful Response
+                  content:
+                    application/json:
+                      schema:
+                        $ref: '#/components/schemas/DocumentResponse-Output'
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse-Input'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /document/list:
+    get:
+      tags:
+        - document
+      summary: Get list of documents
+      operationId: get_documents_document_list_get
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            title: Page
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            title: Size
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentListResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /document/{document_id}:
+    get:
+      tags:
+        - document
+      summary: Get document details by document id
+      operationId: get_document_document__document_id__get
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Document Id
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentResponse-Input'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags:
+        - document
+      summary: Delete document
+      operationId: delete_document_document__document_id__delete
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Document Id
+      responses:
+        '204':
+          description: Successful Response
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /document/{document_id}/summary:
+    post:
+      tags:
+        - document
+      summary: Generate document summary
+      operationId: get_document_summary_document__document_id__summary_post
+      parameters:
+        - name: document_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Document Id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SummaryRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SummaryResponse'
+        '202':
+          description: Successful Response
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /collection:
+    post:
+      tags:
+        - collection
+      summary: Create a collection
+      description: Create a collection (collection of documents) to place documents
+      operationId: create_collection_collection_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CollectionModel'
+        required: true
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionModel'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /collection/list:
+    get:
+      tags:
+        - collection
+      summary: Get list of documents
+      operationId: get_collection_list_collection_list_get
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 1
+            title: Page
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+            title: Size
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionListModel'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /collection/{collection_id}:
+    get:
+      tags:
+        - collection
+      summary: Get document details by document id
+      operationId: get_collection_collection__collection_id__get
+      parameters:
+        - name: collection_id
+          in: path
+          required: true
+          schema:
+            type: string
+            title: Collection Id
+        - name: with_documents
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+            title: With Documents
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollectionModel'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /chat:
+    post:
+      tags:
+        - rag
+      summary: Ask a question from a collection or a document
+      operationId: chat_completion_chat_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+        required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ChatResponse'
+        '409':
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+components:
+  schemas:
+    Body_doc_upload_document_upload_post:
+      properties:
+        file:
+          type: string
+          format: binary
+          title: File
+        collection:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection
+      type: object
+      required:
+        - file
+        - collection
+      title: Body_doc_upload_document_upload_post
+    ChatRequest:
+      properties:
+        collection_name:
+          type: string
+          title: Collection Name
+        filter:
+          anyOf:
+            - $ref: '#/components/schemas/Filter'
+            - type: 'null'
+        query:
+          type: string
+          title: Query
+        llm:
+          anyOf:
+            - $ref: '#/components/schemas/LLM'
+            - type: 'null'
+        include_citations:
+          type: boolean
+          title: Include Citations
+          default: true
+        include_usage:
+          type: boolean
+          title: Include Usage
+          default: false
+      type: object
+      required:
+        - collection_name
+        - query
+      title: ChatRequest
+      description: |2-
+
+            Represents a request for a query on a collection of documents.
+
+            Attributes:
+                collection_name (str): The name of the collection to query.
+                filter (Filter | None, optional): Filter criteria for the query (default: None).
+                query (str): The query string.
+                llm (LLM | None, optional): Language Model configuration for the query (default: None).
+
+    ChatResponse:
+      properties:
+        result:
+          type: string
+          title: Result
+        citations:
+          anyOf:
+            - items:
+                $ref: '#/components/schemas/Citation'
+              type: array
+            - type: 'null'
+          title: Citations
+        usage:
+          anyOf:
+            - $ref: '#/components/schemas/Usage'
+            - type: 'null'
+      type: object
+      required:
+        - result
+      title: ChatResponse
+      description: |2-
+
+            Represents the response to a query.
+
+            Attributes:
+                result (str): The query result.
+                citations (list[Citation] | None, optional): List of citations (default: None).
+                usage (Usage | None, optional): Usage statistics (default: None).
+
+    Citation:
+      properties:
+        content:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Content
+        document:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Document
+        page:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Page
+        page_offset:
+          anyOf:
+            - type: integer
+            - type: 'null'
+          title: Page Offset
+      type: object
+      title: Citation
+      description: |2-
+
+            Represents a citation within a document.
+
+            Attributes:
+                content (str | None, optional): The content of the citation (default: None).
+                document (str | None, optional): The document associated with the citation (default: None).
+                page (int | None, optional): The page number of the citation (default: None).
+                page_offset (int | None, optional): The page offset of the citation (default: None).
+
+    CollectionListModel:
+      properties:
+        collections:
+          items:
+            $ref: '#/components/schemas/CollectionModel'
+          type: array
+          title: Collections
+        links:
+          $ref: '#/components/schemas/Links'
+        meta:
+          $ref: '#/components/schemas/Meta'
+      type: object
+      required:
+        - collections
+        - links
+        - meta
+      title: CollectionListModel
+      description: |2-
+
+            Represents a response containing a list of collections.
+
+            Attributes:
+                collections (list[CollectionModel]): List of CollectionModel objects.
+                links (Links): Navigation links.
+                meta (Meta): Metadata information.
+
+    CollectionModel:
+      properties:
+        uuid:
+          type: string
+          format: uuid4
+          title: Uuid
+        name:
+          type: string
+          title: Name
+        cmetadata:
+          anyOf:
+            - type: object
+            - type: 'null'
+          title: Cmetadata
+        documents:
+          anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+          title: Documents
+      type: object
+      required:
+        - name
+        - cmetadata
+      title: CollectionModel
+      description: |2-
+
+            Represents a collection of documents with metadata.
+
+            Attributes:
+                uuid (UUID4, optional): Unique identifier for the collection (default: None).
+                name (str): The name of the collection.
+                cmetadata (dict | None, optional): Custom metadata associated with the collection (default: None).
+                documents (list[str] | None, optional): List of document names in the collection (default: None).
+
+    DocumentListResponse:
+      properties:
+        documents:
+          items:
+            $ref: '#/components/schemas/DocumentResponse-Input'
+          type: array
+          title: Documents
+        links:
+          anyOf:
+            - $ref: '#/components/schemas/Links'
+            - type: 'null'
+        meta:
+          anyOf:
+            - $ref: '#/components/schemas/Meta'
+            - type: 'null'
+      type: object
+      required:
+        - documents
+        - links
+        - meta
+      title: DocumentListResponse
+      description: |2-
+
+            Represents a response containing a list of documents.
+
+            Attributes:
+                documents (list[DocumentResponse]): List of DocumentResponse objects.
+                links (Links | None, optional): Navigation links or None if not available.
+                meta (Meta | None, optional): Metadata information or None if not available.
+
+    DocumentResponse-Input:
+      properties:
+        id:
+          type: string
+          format: uuid4
+          title: Id
+        file_name:
+          type: string
+          title: File Name
+        process_status:
+          allOf:
+            - $ref: '#/components/schemas/ProcStatus'
+          default: pending
+        process_description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Process Description
+        collection_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection Name
+      type: object
+      required:
+        - file_name
+      title: DocumentResponse
+      description: |2-
+
+            Represents a document response with various attributes.
+
+            Attributes:
+                id (UUID4, optional): The unique identifier for the document response.
+                file_name (str): The name of the associated file.
+                process_status (ProcStatus): The processing status of the document (default: 'pending').
+                process_description (str, optional): A description of the document processing (default: None).
+                collection_name (str, optional): The name of the collection the document belongs to (default: None).
+                model_config (ConfigDict): Configuration dictionary for model settings (generated from attributes).
+
+    DocumentResponse-Output:
+      properties:
+        id:
+          type: string
+          format: uuid4
+          title: Id
+        file_name:
+          type: string
+          title: File Name
+        process_status:
+          allOf:
+            - $ref: '#/components/schemas/ProcStatus'
+          default: pending
+        process_description:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Process Description
+        collection_name:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Collection Name
+      type: object
+      required:
+        - id
+        - file_name
+        - process_status
+        - process_description
+        - collection_name
+      title: DocumentResponse
+      description: |2-
+
+            Represents a document response with various attributes.
+
+            Attributes:
+                id (UUID4, optional): The unique identifier for the document response.
+                file_name (str): The name of the associated file.
+                process_status (ProcStatus): The processing status of the document (default: 'pending').
+                process_description (str, optional): A description of the document processing (default: None).
+                collection_name (str, optional): The name of the collection the document belongs to (default: None).
+                model_config (ConfigDict): Configuration dictionary for model settings (generated from attributes).
+
+    ErrorResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          default: error
+        message:
+          type: string
+          title: Message
+        exception:
+          anyOf:
+            - type: string
+            - type: 'null'
+          title: Exception
+      type: object
+      required:
+        - message
+      title: ErrorResponse
+      description: |2-
+
+            Error response model.
+
+            Attributes:
+                status (str): Status of the response ('error').
+                message (str): Message indicating the response status.
+                exception (str): String representing the exception details.
+
+
+    Filter:
+      properties:
+        document_name:
+          type: string
+          title: Document Name
+      type: object
+      required:
+        - document_name
+      title: Filter
+      description: |2-
+
+            Represents filter criteria
+
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    LLM:
+      properties:
+        model:
+          type: string
+          title: Model
+          default: gpt-3.5-turbo-0613
+        temperature:
+          type: number
+          maximum: 2
+          minimum: 0
+          title: Temperature
+          default: 0
+        top_p:
+          type: number
+          maximum: 1
+          minimum: 0
+          title: Top P
+          default: 1
+        max_tokens:
+          type: integer
+          minimum: 0
+          title: Max Tokens
+          default: 500
+        presence_penalty:
+          type: number
+          maximum: 2
+          minimum: -2
+          title: Presence Penalty
+          default: 0
+        frequency_penalty:
+          type: number
+          maximum: 2
+          minimum: -2
+          title: Frequency Penalty
+          default: 0
+        logit_bias:
+          anyOf:
+            - additionalProperties:
+                type: integer
+              type: object
+            - type: 'null'
+          title: Logit Bias
+          default:
+            '50256': -100
+      type: object
+      title: LLM
+      description: |2-
+
+            Represents configuration options for a Language Model (LLM).
+
+            Attributes:
+                model (str): The LLM model to use (default: Settings.get_settings().openai_default_llm_model).
+                temperature (float): The temperature parameter (default: 0, range: [0, 2]).
+                top_p (float): The top_p parameter (default: 1, range: [0, 1]).
+                max_tokens (int): The maximum number of tokens (default: 500, minimum: 0).
+                presence_penalty (float): The presence penalty (default: 0, range: [-2, 2]).
+                frequency_penalty (float): The frequency penalty (default: 0, range: [-2, 2]).
+                logit_bias (dict[str, int] | None): Logit bias dictionary (default: {"50256": -100}).
+
+    Links:
+      properties:
+        current_page:
+          type: string
+          maxLength: 2083
+          minLength: 1
+          format: uri
+          title: Current Page
+        first_page:
+          type: string
+          maxLength: 2083
+          minLength: 1
+          format: uri
+          title: First Page
+        prev_page:
+          anyOf:
+            - type: string
+              maxLength: 2083
+              minLength: 1
+              format: uri
+            - type: 'null'
+          title: Prev Page
+        next_page:
+          anyOf:
+            - type: string
+              maxLength: 2083
+              minLength: 1
+              format: uri
+            - type: 'null'
+          title: Next Page
+        last_page:
+          type: string
+          maxLength: 2083
+          minLength: 1
+          format: uri
+          title: Last Page
+      type: object
+      required:
+        - current_page
+        - first_page
+        - prev_page
+        - next_page
+        - last_page
+      title: Links
+      description: |2-
+
+            Represents navigation links for paginated results.
+
+            Attributes:
+                current_page (HttpUrl): The URL of the current page.
+                first_page (HttpUrl): The URL of the first page.
+                prev_page (HttpUrl | None, optional): The URL of the previous page or None if not available.
+                next_page (HttpUrl | None, optional): The URL of the next page or None if not available.
+                last_page (HttpUrl): The URL of the last page.
+
+    Meta:
+      properties:
+        total_records:
+          type: integer
+          title: Total Records
+        total_pages:
+          type: integer
+          title: Total Pages
+      type: object
+      required:
+        - total_records
+        - total_pages
+      title: Meta
+      description: |2-
+
+            Represents metadata information.
+
+            Attributes:
+                total_records (int): Total number of records.
+                total_pages (int): Total number of pages.
+
+    ProcStatus:
+      type: string
+      enum:
+        - pending
+        - complete
+        - error
+      title: ProcStatus
+      description: Enum representing the processing status of a document.
+    SummaryRequest:
+      properties:
+        regenerate:
+          type: boolean
+          title: Regenerate
+          default: false
+        synchronous:
+          type: boolean
+          title: Synchronous
+          default: false
+      type: object
+      title: SummaryRequest
+      description: |2-
+
+            Represents a request for document summary generation.
+
+            Attributes:
+                regenerate (bool, optional): Whether to regenerate the summary (default: False).
+                synchronous (bool, optional): Whether to generate the summary synchronously (default: False).
+
+    SummaryResponse:
+      properties:
+        document_id:
+          type: string
+          format: uuid4
+          title: Document Id
+        file_name:
+          type: string
+          title: File Name
+        summary:
+          type: string
+          title: Summary
+      type: object
+      required:
+        - document_id
+        - file_name
+        - summary
+      title: SummaryResponse
+      description: |2-
+
+            Represents a summary response for a document.
+
+            Attributes:
+                document_id (UUID4): Unique identifier for the associated document.
+                file_name (str): The name of the document file.
+                summary (str): The summary of the document.
+
+    Usage:
+      properties:
+        prompt_tokens:
+          type: integer
+          title: Prompt Tokens
+        completion_tokens:
+          type: integer
+          title: Completion Tokens
+        total_tokens:
+          type: integer
+          title: Total Tokens
+      type: object
+      required:
+        - prompt_tokens
+        - completion_tokens
+        - total_tokens
+      title: Usage
+      description: |2-
+
+            Represents usage statistics for a language model.
+
+            Attributes:
+                prompt_tokens (int): The number of tokens in the prompt.
+                completion_tokens (int): The number of tokens in the completion.
+                total_tokens (int): The total number of tokens used.
+
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+      type: object
+      required:
+        - loc
+        - msg
+        - type
+      title: ValidationError

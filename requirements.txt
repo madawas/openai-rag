@@ -6,7 +6,6 @@ pydantic-settings==2.0.3
 pydantic_core==2.6.1
 python-dotenv==1.0.0
 python-multipart==0.0.9
-typing_extensions==4.7.1
 uvicorn==0.23.2
 pypdf~=4.0.1
 tenacity~=8.2.3
