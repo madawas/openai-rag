@@ -29,14 +29,18 @@ app.include_router(collections.router)
     },
 )
 async def chat_completion(
-    response: Response, chat_request: ChatRequest, session: AsyncSession = Depends(get_db_session)
+    response: Response,
+    chat_request: ChatRequest,
+    session: AsyncSession = Depends(get_db_session),
 ):
     try:
         if not chat_request.collection_name:
             raise HTTPException(status_code=400, detail=f"Collection name is empty")
 
         collection_dao = CollectionDAO(session)
-        collection, _ = collection_dao.get_collection_by_name(chat_request.collection_name, False)
+        collection, _ = collection_dao.get_collection_by_name(
+            chat_request.collection_name, False
+        )
         return __get_qa_result(chat_request)
     except HTTPException as e:
         response.status_code = e.status_code

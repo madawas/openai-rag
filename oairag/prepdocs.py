@@ -5,6 +5,7 @@ content, as well as embedding text chunks and storing them in a vector collectio
 It also provides utility functions to determine file formats and split content based on file
 formats.
 """
+
 import logging
 import os
 from typing import Optional
