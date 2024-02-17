@@ -10,7 +10,7 @@ import logging
 import os
 from typing import Optional
 
-from langchain.document_loaders import (
+from langchain_community.document_loaders import (
     PyPDFLoader,
     TextLoader,
     UnstructuredHTMLLoader,

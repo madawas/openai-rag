@@ -1,6 +1,6 @@
 from langchain_openai import OpenAIEmbeddings
 from langchain.schema import Document
-from langchain.vectorstores import PGVector
+from langchain_community.vectorstores import PGVector
 
 from .config import Settings
 
