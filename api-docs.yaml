@@ -1,4 +1,4 @@
-openapi: 3.1.0
+openapi: 3.0.3
 info:
   title: OpenAI Retrieval Augmented Generation API
   version: 0.0.1
@@ -8,9 +8,7 @@ paths:
       tags:
         - document
       summary: Upload a document to process
-      description: >-
-        Upload a document to extract the text, chunk it and embed the chunks and
-        store in a vector store
+      description: Upload a document to extract the text, chunk it and embed the chunks and store in a vector store
       operationId: doc_upload_document_upload_post
       parameters:
         - name: callback_url
@@ -22,7 +20,6 @@ paths:
                 format: uri
                 minLength: 1
                 maxLength: 2083
-              - type: 'null'
             title: Callback Url
       requestBody:
         required: true
@@ -399,7 +396,6 @@ components:
         collection:
           anyOf:
             - type: string
-            - type: 'null'
           title: Collection
       type: object
       required:
@@ -414,14 +410,12 @@ components:
         filter:
           anyOf:
             - $ref: '#/components/schemas/Filter'
-            - type: 'null'
         query:
           type: string
           title: Query
         llm:
           anyOf:
             - $ref: '#/components/schemas/LLM'
-            - type: 'null'
         include_citations:
           type: boolean
           title: Include Citations
@@ -455,12 +449,10 @@ components:
             - items:
                 $ref: '#/components/schemas/Citation'
               type: array
-            - type: 'null'
           title: Citations
         usage:
           anyOf:
             - $ref: '#/components/schemas/Usage'
-            - type: 'null'
       type: object
       required:
         - result
@@ -479,22 +471,18 @@ components:
         content:
           anyOf:
             - type: string
-            - type: 'null'
           title: Content
         document:
           anyOf:
             - type: string
-            - type: 'null'
           title: Document
         page:
           anyOf:
             - type: integer
-            - type: 'null'
           title: Page
         page_offset:
           anyOf:
             - type: integer
-            - type: 'null'
           title: Page Offset
       type: object
       title: Citation
@@ -546,14 +534,12 @@ components:
         cmetadata:
           anyOf:
             - type: object
-            - type: 'null'
           title: Cmetadata
         documents:
           anyOf:
             - items:
                 type: string
               type: array
-            - type: 'null'
           title: Documents
       type: object
       required:
@@ -580,11 +566,9 @@ components:
         links:
           anyOf:
             - $ref: '#/components/schemas/Links'
-            - type: 'null'
         meta:
           anyOf:
             - $ref: '#/components/schemas/Meta'
-            - type: 'null'
       type: object
       required:
         - documents
@@ -616,12 +600,10 @@ components:
         process_description:
           anyOf:
             - type: string
-            - type: 'null'
           title: Process Description
         collection_name:
           anyOf:
             - type: string
-            - type: 'null'
           title: Collection Name
       type: object
       required:
@@ -655,12 +637,10 @@ components:
         process_description:
           anyOf:
             - type: string
-            - type: 'null'
           title: Process Description
         collection_name:
           anyOf:
             - type: string
-            - type: 'null'
           title: Collection Name
       type: object
       required:
@@ -694,7 +674,6 @@ components:
         exception:
           anyOf:
             - type: string
-            - type: 'null'
           title: Exception
       type: object
       required:
@@ -772,7 +751,6 @@ components:
             - additionalProperties:
                 type: integer
               type: object
-            - type: 'null'
           title: Logit Bias
           default:
             '50256': -100
@@ -811,7 +789,6 @@ components:
               maxLength: 2083
               minLength: 1
               format: uri
-            - type: 'null'
           title: Prev Page
         next_page:
           anyOf:
@@ -819,7 +796,6 @@ components:
               maxLength: 2083
               minLength: 1
               format: uri
-            - type: 'null'
           title: Next Page
         last_page:
           type: string
